@@ -1,1125 +1,510 @@
-# Sentyr 
+# Sentyr
 
-**Complete Google Workspace Security, Compliance & IT Administration**
+**An AI agent framework for cybersecurity use cases, starting with security triage, analysis, and incident response.**
 
----
+## Overview
 
-## What is Sentyr?
+Sentyr is a modular, extensible AI agent framework designed to tackle complex cybersecurity challenges through intelligent automation. Built on a foundation of specialized AI agents, Sentyr provides a flexible architecture for building sophisticated security workflows that combine machine learning, threat intelligence, and human expertise.
 
-A powerful, self-hosted Python CLI tool for comprehensive security monitoring, compliance management, and IT automation for Google Workspace.
+The framework currently focuses on two core capabilities:
+- **Security Analysis & Triage**: Multi-phase threat detection, IOC enrichment, behavioral analysis, and MITRE ATT&CK mapping
+- **Incident Response**: Complete incident lifecycle management from detection through post-mortem analysis
 
-> **"24/7 security monitoring for your entire Google Workspace environment—detect PII in shared files, audit OAuth apps, track user activity, enforce compliance policies, and get real-time alerts. All automated and self-hosted."**
+## Core Philosophy
 
-**For Security Teams**: Detect data leaks, audit access controls, monitor suspicious activity
-**For Compliance Teams**: Automated GDPR/HIPAA/SOC2/PCI-DSS/FERPA/FedRAMP reporting
-**For IT Admins**: Employee lifecycle automation, bulk operations, comprehensive visibility
-**For Executives**: Risk dashboards, compliance scorecards, trend analysis
+Sentyr is built as a **framework, not a platform**. It provides:
+- **Modular AI Agents**: Specialized agents that can be composed into workflows
+- **Extensible Architecture**: Easy to add new agents and capabilities
+- **Integration-Ready**: Designed to work with your existing security stack
+- **Production-Grade**: Built with reliability, observability, and scalability in mind
 
-### Key Features
+## Architecture
 
-- 🔍 **13 Security Scanners** - Files, OAuth apps, users, groups, mobile devices, Chrome OS, Gmail, audit logs, calendar, Vault, shared drives, licenses, Gmail security
-- 👥 **User Lifecycle Management** - Create, update, suspend, restore, delete users with bulk operations
-- 🏢 **Organizational Management** - Full CRUD operations for OUs and calendar resources
-- 💾 **Backup & Export** - Automated backups of users, groups, and organizational structure
-- 📊 **Compliance Reporting** - GDPR, HIPAA, SOC2, PCI-DSS, FERPA, FedRAMP
-- 🚨 **Real-time Monitoring** - Health checks, Prometheus metrics, automated alerts
-- 🔄 **Automated Workflows** - Scheduled scans, employee offboarding, PII detection alerts
-- 🎨 **Custom PII Detection** - Industry-specific patterns with 20+ built-in detectors
-- 📈 **HTML Dashboards** - Executive-friendly reports with charts and visualizations
-- 🌐 **Multi-Domain Support** - Manage multiple Google Workspace domains
-- ✅ **535 Tests** - 100% passing with comprehensive coverage
+Sentyr uses a layered architecture designed for modularity and extensibility:
 
----
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      API Layer                               │
+│  REST API (FastAPI) | Python SDK | CLI                       │
+└─────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────┐
+│                    AI Agent Layer                            │
+│  ┌──────────────────┐      ┌──────────────────┐            │
+│  │  Security        │      │  Incident        │            │
+│  │  Analysis Agent  │      │  Response Agent  │            │
+│  └──────────────────┘      └──────────────────┘            │
+│                                                              │
+│  ┌──────────────────────────────────────────┐              │
+│  │  Agent Orchestrator                       │              │
+│  │  (Multi-agent workflow coordination)      │              │
+│  └──────────────────────────────────────────┘              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────┐
+│                    Processing Layer                          │
+│  ML Engine | Behavioral Analysis | Threat Intel | Parsers   │
+└─────────────────────────────────────────────────────────────┘
+                              │
+┌─────────────────────────────────────────────────────────────┐
+│                   Integration Layer                          │
+│  Jira | PagerDuty | ServiceNow | Datadog | GitHub | GitLab  │
+│  VirusTotal | AlienVault OTX | AbuseIPDB | Shodan           │
+└─────────────────────────────────────────────────────────────┘
+```
 
-## 🚀 Quick Start
+### Agent Framework
+
+The framework provides a robust foundation for building AI-powered security agents:
+
+- **BaseAgent**: Foundation class with async/await, caching, error handling, and observability
+- **AgentContext**: Shared context for passing data between agents (incidents, IOCs, findings, timeline)
+- **AgentOrchestrator**: Coordinates multi-agent workflows and manages task distribution
+- **AgentCapability**: Enum defining agent capabilities for discovery and routing
+
+## Core Agents
+
+### Security Analysis Agent
+
+The Security Analysis Agent performs comprehensive threat analysis using a multi-phase approach:
+
+**Capabilities:**
+- **12-Phase Analysis Pipeline**: IOC enrichment → Behavioral analysis → ML-powered detection → Threat actor attribution → AI reasoning
+- **MITRE ATT&CK Mapping**: Automatic technique identification and attack chain reconstruction
+- **Multi-Platform Parsers**: AWS GuardDuty, GCP Security Command Center, Datadog, CrowdStrike, Snowflake
+- **IOC Enrichment**: Integration with VirusTotal, AlienVault OTX, AbuseIPDB, Shodan
+- **Behavioral Analysis**: 8 attack pattern signatures with anomaly scoring
+- **ML-Powered Detection**: Isolation Forest for anomaly detection, Random Forest for threat prediction
+- **Threat Actor Attribution**: Correlation with known APT groups and TTPs
+
+**Output:**
+- Executive summary with risk scoring (0-10)
+- 5W1H analysis (Who, What, When, Where, Why, How)
+- MITRE ATT&CK techniques with confidence scores
+- Attack chain timeline
+- Immediate actions and recommendations
+- Investigation queries for further analysis
+
+### Incident Response Agent
+
+The Incident Response Agent manages the complete incident lifecycle:
+
+**Capabilities:**
+- **Lifecycle Management**: Detection → Analysis → Containment → Eradication → Recovery → Post-Incident
+- **Timeline Reconstruction**: Correlate events across system logs, EDR, network, and human actions
+- **Root Cause Analysis**: Identify initial attack vectors and contributing factors
+- **Impact Assessment**: Calculate MTTD, MTTC, MTTR and assess business impact
+- **Post-Mortem Generation**: BLUF-style reports with 5W1H framework
+- **Corrective Action Planning**: Technical remediation, process improvements, and training recommendations
+- **Ticketing Integration**: Automatic issue creation in Jira, ServiceNow, PagerDuty
+
+**Output:**
+- Comprehensive incident timeline
+- Root cause analysis with confidence scoring
+- Business impact metrics (financial, reputational, regulatory)
+- Post-mortem report with lessons learned
+- Prioritized corrective action plan
+- Compliance reporting artifacts
+
+## Project Structure
+
+```
+sentyr/
+├── sentyr/                     # Core framework code
+│   ├── agents/                 # AI agent implementations
+│   │   ├── framework.py        # Base agent framework and orchestrator
+│   │   ├── base.py             # Legacy base agent class
+│   │   ├── security_analyst.py # Security analysis agent (legacy)
+│   │   ├── security_analysis.py # Security analysis agent (framework)
+│   │   ├── incident_response.py # Incident response agent
+│   │   └── orchestrator.py     # Multi-agent orchestration
+│   ├── parsers/                # Security event parsers
+│   │   ├── base.py             # Base parser interface
+│   │   ├── guardduty.py        # AWS GuardDuty
+│   │   ├── gcp_scc.py          # GCP Security Command Center
+│   │   ├── datadog.py          # Datadog Security
+│   │   ├── crowdstrike.py      # CrowdStrike EDR
+│   │   └── snowflake.py        # Snowflake Security
+│   ├── integrations/           # External service integrations
+│   │   ├── jira_integration.py # Jira ticketing
+│   │   ├── servicenow_integration.py # ServiceNow ITSM
+│   │   ├── pagerduty_integration.py # PagerDuty alerting
+│   │   ├── datadog_integration.py # Datadog monitoring
+│   │   ├── github_integration.py # GitHub automation
+│   │   └── gitlab_integration.py # GitLab automation
+│   ├── api.py                  # FastAPI REST API
+│   ├── cli.py                  # Command-line interface
+│   ├── models.py               # Data models (Pydantic)
+│   ├── config.py               # Configuration management
+│   ├── logger.py               # Structured logging
+│   ├── ml_engine.py            # Machine learning engine
+│   ├── behavioral_analysis.py  # Behavioral analysis engine
+│   ├── threat_intel.py         # Threat intelligence engine
+│   ├── threat_feeds.py         # External threat feed integration
+│   ├── correlation.py          # Event correlation
+│   ├── streaming.py            # Real-time event streaming
+│   ├── forensics.py            # Digital forensics
+│   ├── playbooks.py            # Automated response playbooks
+│   ├── incidents.py            # Incident management
+│   ├── notifications.py        # Alert notifications
+│   ├── webhooks.py             # Webhook handlers
+│   ├── cache.py                # Caching layer
+│   ├── metrics.py              # Metrics collection
+│   ├── infrastructure/         # Infrastructure components
+│   │   ├── message_queue.py    # RabbitMQ integration
+│   │   └── redis_cache.py      # Redis caching
+│   ├── monitoring/             # Observability
+│   │   ├── metrics.py          # Prometheus metrics
+│   │   └── tracing.py          # OpenTelemetry tracing
+│   └── security/               # Security utilities
+│       ├── secrets_manager.py  # Secrets management
+│       └── password_manager.py # Password hashing
+├── tests/                      # Test suites
+├── docs/                       # Documentation
+│   ├── agents/                 # Agent documentation
+│   └── integrations/           # Integration guides
+├── examples/                   # Example usage
+│   └── api_client.py           # Python SDK example
+├── config/                     # Configuration files
+│   ├── development.yaml        # Development config
+│   ├── staging.yaml            # Staging config
+│   └── production.yaml         # Production config
+├── requirements.txt            # Python dependencies
+├── pyproject.toml              # Poetry configuration
+└── README.md                   # This file
+```
+
+## Framework Capabilities
+
+### Event Parsing & Normalization
+- **Multi-Platform Support**: AWS GuardDuty, GCP SCC, Datadog, CrowdStrike, Snowflake
+- **Unified Event Model**: Normalize events from different sources into a common schema
+- **IOC Extraction**: Automatic extraction of IPs, domains, URLs, file hashes, user accounts
+
+### Machine Learning
+- **Anomaly Detection**: Isolation Forest for detecting unusual patterns (7 anomaly types)
+- **Threat Prediction**: Random Forest classifier for predicting attack types (8 categories)
+- **Feature Engineering**: Automatic feature extraction from security events
+- **Model Training**: Support for online learning and model updates
+
+### Behavioral Analysis
+- **Attack Pattern Recognition**: 8 built-in attack signatures (cryptojacking, ransomware, data exfiltration, etc.)
+- **Anomaly Scoring**: Confidence-based scoring for behavioral anomalies
+- **Temporal Analysis**: Time-series analysis for detecting suspicious patterns
+
+### Threat Intelligence
+- **Multi-Source Enrichment**: VirusTotal, AlienVault OTX, AbuseIPDB, Shodan
+- **Smart Caching**: Redis-backed caching for 4-5x performance improvement
+- **Reputation Scoring**: Aggregate reputation scores from multiple sources
+- **Batch Processing**: Efficient bulk IOC enrichment
+
+### Incident Management
+- **Lifecycle Tracking**: Manage incidents through all phases (detection → recovery)
+- **Timeline Reconstruction**: Correlate events across multiple data sources
+- **Metrics Calculation**: MTTD, MTTC, MTTR, and business impact assessment
+- **Audit Trail**: Complete audit logging with cryptographic verification
+
+### Automated Response
+- **Playbook Execution**: Pre-built playbooks for common scenarios (ransomware, data exfiltration, etc.)
+- **Response Actions**: Isolate host, block IP, disable user, quarantine file, etc.
+- **Approval Workflows**: Multi-level approval for sensitive actions
+- **Rollback Support**: Ability to undo automated actions
+
+### Integrations
+- **Ticketing**: Jira, ServiceNow, PagerDuty
+- **Monitoring**: Datadog
+- **Development**: GitHub, GitLab
+- **Threat Intel**: VirusTotal, AlienVault OTX, AbuseIPDB, Shodan
+
+
+
+## Quick Start
 
 ### Installation
 
 ```bash
 # Clone the repository
-git clone https://github.com/clay-good/sentyr.git
+git clone https://github.com/yourusername/sentyr.git
 cd sentyr
 
 # Install dependencies
+pip install -r requirements.txt
+
+# Or use Poetry
 poetry install
 
-# Verify installation
-poetry run sentyr --version
+# Set up configuration
+export SENTYR_ENV=development
+export ANTHROPIC_API_KEY=your-claude-api-key
 ```
 
-### Setup & First Scan
+### Basic Usage
 
-```bash
-# 1. Configure credentials (see Setup Guide below)
-cp examples/basic-config.yaml config.yaml
-# Edit config.yaml with your service account details
+```python
+from sentyr.agents.security_analyst import SecurityAnalystAgent
+from sentyr.agents.incident_response import IncidentResponseAgent
+from sentyr.parsers.guardduty import GuardDutyParser
+from sentyr.config import get_config
 
-# 2. Test authentication
-poetry run sentyr test
+# Initialize configuration
+config = get_config()
 
-# 3. Run your first READ-ONLY scan
-poetry run sentyr scan files --external-only --output report.csv
+# Parse a security event
+parser = GuardDutyParser()
+event = parser.parse(guardduty_finding)
 
-# 4. Check for PII in shared files (READ-ONLY)
-poetry run sentyr scan files --check-pii --external-only
+# Analyze with Security Analysis Agent
+analyst = SecurityAnalystAgent(config)
+analysis = await analyst.analyze([event])
+
+print(f"Risk Score: {analysis.risk_score}/10")
+print(f"Executive Summary: {analysis.executive_summary}")
+print(f"MITRE Techniques: {[t.technique_id for t in analysis.mitre_techniques]}")
+
+# Create incident and perform incident response
+ir_agent = IncidentResponseAgent(config)
+incident_output = await ir_agent.execute(agent_input)
+
+print(f"Root Cause: {incident_output.results['root_cause']}")
+print(f"Corrective Actions: {incident_output.results['corrective_actions']}")
 ```
 
-**Prerequisites**: Python 3.9+, Google Workspace, Admin access, Service account with domain-wide delegation
-
----
-
-## 📋 Complete Command Reference
-
-### Quick Reference Table
-
-| Command Group | Commands | Access Level | Use Case |
-|--------------|----------|--------------|----------|
-| **scan** | 13 scanners | READ-ONLY ✅ | Security scanning & auditing |
-| **users** | create, update, suspend, restore, delete | READ & WRITE ⚠️ | User provisioning |
-| **bulk** | create-users, suspend-users, export-users | READ & WRITE ⚠️ | Bulk operations |
-| **offboard** | user | READ & WRITE ⚠️ | Employee offboarding |
-| **ou** | list, get, create, update, delete | READ & WRITE ⚠️ | OU management |
-| **resources** | list, get, create, update, delete | READ & WRITE ⚠️ | Calendar resources |
-| **backup** | users, groups, org-units, full, list | READ-ONLY ✅ | Data backup |
-| **compliance** | report | READ-ONLY ✅ | Compliance reporting |
-| **monitor** | health | READ-ONLY ✅ | System health |
-| **metrics** | export, serve | READ-ONLY ✅ | Prometheus metrics |
-| **workflow** | external-pii-alert, gmail-external-pii-alert | READ-ONLY + Alerts | Automated workflows |
-| **schedule** | add, list, run | READ-ONLY ✅ | Scheduled scans |
-| **custom-pii** | add, list, remove | Configuration ⚙️ | Custom PII patterns |
-| **report** | generate | READ-ONLY ✅ | HTML dashboards |
-| **init** | - | Configuration ⚙️ | Setup wizard |
-| **test** | - | READ-ONLY ✅ | Connection test |
-| **config** | - | READ-ONLY ✅ | View config |
-| **version** | - | READ-ONLY ✅ | Version info |
-
----
-
-### 🔍 **Security Scanning Commands** (READ-ONLY)
-
-All scanning commands are **READ-ONLY** and safe to run anytime. They do NOT modify your Google Workspace.
-
-#### 1. **Scan Files** - Find externally shared files with PII 🔥 Most Popular
+### Running the API Server
 
 ```bash
-# Scan all externally shared files for PII
-sentyr scan files --external-only --check-pii --output pii-report.csv
+# Start the FastAPI server
+python -m sentyr.api
 
-# Scan specific user's files
-sentyr scan files --user user@company.com --check-pii
-
-# Scan with max file limit (for testing)
-sentyr scan files --max-files 100 --external-only
+# API will be available at http://localhost:8000
+# Swagger docs at http://localhost:8000/docs
 ```
 
-**Why it's important**: Detects sensitive data (SSN, credit cards, bank accounts) shared outside your organization
-**Permissions**: `drive.readonly`, `admin.directory.user.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-#### 2. **Scan OAuth Apps** - Audit third-party access
+### Using the CLI
 
 ```bash
-# Find high-risk OAuth apps
-sentyr scan oauth-apps --min-risk-score 70 --output oauth-report.csv
+# Analyze a security event
+sentyr analyze --file event.json --parser guardduty
 
-# Scan specific user's OAuth tokens
-sentyr scan oauth-apps --user user@company.com
+# Run incident response
+sentyr incident respond --incident-id INC-001
+
+# Check agent status
+sentyr agent status
 ```
 
-**Why it's important**: Identifies risky third-party apps with excessive permissions
-**Permissions**: `admin.directory.user.readonly`
-**Access**: READ-ONLY ✅
+## Configuration
 
----
+Configuration is managed through YAML files in the `config/` directory and environment variables.
 
-#### 3. **Scan Users** - Find inactive users & 2FA compliance
+### Configuration Files
 
-```bash
-# Find inactive users (90+ days)
-sentyr scan users --inactive-days 90 --output users-report.csv
+- `config/development.yaml` - Development environment settings
+- `config/staging.yaml` - Staging environment settings
+- `config/production.yaml` - Production environment settings
 
-# Check 2FA compliance
-sentyr scan users --check-2fa
-
-# Find admin users
-sentyr scan users --admins-only
-```
-
-**Why it's important**: Identifies security risks from inactive accounts and missing 2FA
-**Permissions**: `admin.directory.user.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-#### 4. **Scan Groups** - Audit external members & public groups
+### Environment Variables
 
 ```bash
-# Find groups with external members
-sentyr scan groups --external-members --output groups-report.csv
+# Core Configuration
+export SENTYR_ENV=development  # or staging, production
+export ANTHROPIC_API_KEY=your-claude-api-key
 
-# Find public groups
-sentyr scan groups --public-groups
+# Optional: Database (defaults to SQLite)
+export SENTYR_DB_URL=postgresql://user:pass@host:5432/sentyr
 
-# Find orphaned groups (no owners)
-sentyr scan groups --orphaned
+# Optional: Redis Cache
+export REDIS_URL=redis://localhost:6379/0
+
+# Optional: Threat Intelligence APIs
+export VIRUSTOTAL_API_KEY=your-key
+export ALIENVAULT_OTX_API_KEY=your-key
+export ABUSEIPDB_API_KEY=your-key
+export SHODAN_API_KEY=your-key
+
+# Optional: Ticketing Integrations
+export JIRA_URL=https://your-company.atlassian.net
+export JIRA_USERNAME=user@example.com
+export JIRA_API_TOKEN=your-token
+export JIRA_PROJECT_KEY=SEC
+
+export PAGERDUTY_API_KEY=your-key
+export SERVICENOW_URL=https://your-instance.service-now.com
+export SERVICENOW_USERNAME=your-username
+export SERVICENOW_PASSWORD=your-password
+
+# Optional: Monitoring
+export DATADOG_API_KEY=your-key
 ```
 
-**Why it's important**: Prevents data leaks through group memberships
-**Permissions**: `admin.directory.group.readonly`
-**Access**: READ-ONLY ✅
+## Extending the Framework
 
----
+### Creating a Custom Agent
 
-#### 5. **Scan Mobile Devices** - Security & compliance checks
+```python
+from sentyr.agents.framework import BaseAgent, AgentCapability, AgentInput, AgentOutput
+from sentyr.config import SentyrConfig
+
+class MyCustomAgent(BaseAgent):
+    """Custom agent for specialized security tasks"""
+
+    def __init__(self, config: SentyrConfig):
+        super().__init__(
+            agent_id="my-custom-agent",
+            agent_name="My Custom Agent",
+            agent_version="1.0.0",
+            capabilities=[AgentCapability.CUSTOM],
+            description="Custom security agent"
+        )
+        self.config = config
+
+    async def execute(self, input_data: AgentInput) -> AgentOutput:
+        """Execute custom agent logic"""
+        # Your custom logic here
+        results = {"status": "completed"}
+
+        return AgentOutput(
+            agent_id=self.agent_id,
+            agent_name=self.agent_name,
+            status=AgentStatus.COMPLETED,
+            results=results,
+            confidence=0.9,
+            reasoning=["Custom analysis performed"],
+            data_sources_used=["custom_source"],
+            recommendations=[],
+            next_actions=[],
+            audit_trail=[],
+            execution_time=1.0
+        )
+```
+
+### Creating a Custom Parser
+
+```python
+from sentyr.parsers.base import BaseParser
+from sentyr.models import SecurityEvent, TechnicalIndicator
+
+class MyCustomParser(BaseParser):
+    """Parser for custom security event format"""
+
+    def parse(self, raw_event: dict) -> SecurityEvent:
+        """Parse custom event format into SecurityEvent"""
+        return SecurityEvent(
+            event_id=raw_event["id"],
+            source="my-custom-source",
+            event_type=raw_event["type"],
+            severity=raw_event["severity"],
+            timestamp=raw_event["timestamp"],
+            description=raw_event["description"],
+            technical_indicators=[
+                TechnicalIndicator(
+                    indicator_type="ip",
+                    value=raw_event["source_ip"]
+                )
+            ],
+            raw_event=raw_event
+        )
+```
+
+## System Requirements
+
+### Minimum Requirements
+- Python 3.11+
+- 2 CPU cores
+- 4GB RAM
+- 20GB disk space
+
+### Recommended for Production
+- Python 3.11+
+- 8+ CPU cores
+- 16GB+ RAM
+- 100GB SSD storage
+- PostgreSQL 15+ (optional, defaults to SQLite)
+- Redis 7+ (optional, for caching)
+- RabbitMQ 3.8+ (optional, for message queuing)
+
+## Performance Characteristics
+
+- **Event Processing**: <100ms latency per event
+- **ML Inference**: <150ms for threat prediction
+- **Anomaly Detection**: <100ms per event
+- **API Response Time**: <200ms (p95)
+- **Agent Execution**: 1-5s average (depending on enrichment)
+
+## Security Features
+
+- **Secrets Management**: Support for Vault, AWS Secrets Manager, Azure Key Vault
+- **Password Hashing**: Bcrypt/Argon2 for credential storage
+- **API Security**: Rate limiting, authentication, CORS
+- **Audit Logging**: Complete audit trail for all agent actions
+- **Input Validation**: Pydantic-based validation for all inputs
+
+## Observability
+
+- **Metrics**: Prometheus metrics export
+- **Tracing**: OpenTelemetry distributed tracing
+- **Logging**: Structured logging with correlation IDs (structlog)
+- **Health Checks**: `/health` endpoint for monitoring
+- **Performance Profiling**: Built-in profiling support
+
+## Testing
 
 ```bash
-# Scan all mobile devices
-sentyr scan devices --output devices-report.csv
+# Run all tests
+pytest tests/
 
-# Find inactive devices
-sentyr scan devices --inactive-days 90
+# Run specific test suite
+pytest tests/test_enhanced_security_analyst.py
 
-# Find devices without passwords
-sentyr scan devices --no-password
+# Run with coverage
+pytest --cov=sentyr tests/
+
+# Run with verbose output
+pytest -v tests/
 ```
 
-**Why it's important**: Identifies compromised, unencrypted, or inactive mobile devices
-**Permissions**: `admin.directory.device.mobile.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-#### 6. **Scan Chrome Devices** - Chromebook security
-
-```bash
-# Scan all Chrome OS devices
-sentyr scan chrome-devices --output chrome-report.csv
-
-# Scan specific org unit
-sentyr scan chrome-devices --org-unit "/Students"
-
-# Find inactive Chromebooks
-sentyr scan chrome-devices --inactive-days 90
-```
-
-**Why it's important**: Finds Chromebooks with expired auto-updates or developer mode
-**Permissions**: `admin.directory.device.chromeos.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-#### 7. **Scan Gmail** - Email attachments & PII
-
-```bash
-# Scan Gmail attachments for PII
-sentyr scan gmail --days-back 30 --check-pii --output gmail-report.csv
-
-# Scan specific users
-sentyr scan gmail --user user1@company.com --user user2@company.com
-
-# External emails only
-sentyr scan gmail --external-only --days-back 7
-```
-
-**Why it's important**: Detects PII in email attachments sent externally
-**Permissions**: `gmail.readonly`, `admin.directory.user.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-#### 8. **Scan Gmail Security** - Delegates, forwarding, filters
-
-```bash
-# Check for email delegates
-sentyr scan gmail-security --delegates --output delegates-report.csv
-
-# Check auto-forwarding rules
-sentyr scan gmail-security --forwarding
-
-# Check send-as aliases
-sentyr scan gmail-security --send-as
-
-# Check all security settings
-sentyr scan gmail-security --delegates --forwarding --send-as --filters
-```
-
-**Why it's important**: Detects unauthorized email access and forwarding rules
-**Permissions**: `gmail.settings.basic.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-#### 9. **Scan Audit Logs** - Suspicious activity detection
-
-```bash
-# Scan recent audit logs
-sentyr scan audit-logs --days-back 7 --output audit-report.csv
-
-# Detect anomalies
-sentyr scan audit-logs --detect-anomalies --days-back 30
-
-# Specific event types
-sentyr scan audit-logs --event-type admin --days-back 7
-```
-
-**Why it's important**: Detects suspicious admin activity and security events
-**Permissions**: `admin.reports.audit.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-#### 10. **Scan Calendar** - Public calendars & PII
-
-```bash
-# Scan calendars for PII
-sentyr scan calendar --check-pii --output calendar-report.csv
-
-# Check for public calendars
-sentyr scan calendar --days-ahead 30
-
-# Scan specific users
-sentyr scan calendar --user user@company.com
-```
-
-**Why it's important**: Finds calendar events with PII or public sharing
-**Permissions**: `calendar.readonly`, `admin.directory.user.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-#### 11. **Scan Shared Drives** - Team Drive security
-
-```bash
-# Scan all Shared Drives
-sentyr scan shared-drives --output shared-drives-report.csv
-
-# Scan files in Shared Drives
-sentyr scan shared-drives --scan-files --check-pii
-
-# External sharing only
-sentyr scan shared-drives --external-only
-```
-
-**Why it's important**: Audits Team Drive permissions and external sharing
-**Permissions**: `drive.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-#### 12. **Scan Licenses** - Cost optimization
-
-```bash
-# Scan license usage
-sentyr scan licenses --output licenses-report.csv
-
-# Find unused licenses
-sentyr scan licenses --unused-days 90 --show-recommendations
-
-# Cost analysis
-sentyr scan licenses --show-recommendations
-```
-
-**Why it's important**: Identifies unused licenses to reduce costs
-**Permissions**: `admin.directory.user.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-#### 13. **Scan Vault** - Legal holds & retention
-
-```bash
-# Scan Vault matters
-sentyr scan vault --output vault-report.csv
-
-# Check legal holds
-sentyr scan vault --check-holds
-
-# Specific matter
-sentyr scan vault --matter-id <matter-id>
-```
-
-**Why it's important**: Audits legal holds and retention policies
-**Permissions**: `ediscovery.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-### ✏️ **User Management Commands** (READ & WRITE)
-
-⚠️ **Warning**: These commands MODIFY your Google Workspace. Use with caution!
-
-#### 14. **Create User** - Provision new employee
-
-```bash
-# Create new user
-sentyr users create john.doe@company.com \
-  --first-name John \
-  --last-name Doe \
-  --password "TempPass123!" \
-  --org-unit "/Engineering"
-```
-
-**Why it's important**: Automates employee onboarding
-**Permissions**: `admin.directory.user` (READ & WRITE)
-**Access**: READ & WRITE ⚠️
-
----
-
-#### 15. **Update User** - Modify user account
-
-```bash
-# Update user details
-sentyr users update user@company.com \
-  --first-name John \
-  --last-name Smith \
-  --org-unit "/Sales"
-```
-
-**Why it's important**: Updates employee information
-**Permissions**: `admin.directory.user` (READ & WRITE)
-**Access**: READ & WRITE ⚠️
-
----
-
-#### 16. **Suspend User** - Block account access
-
-```bash
-# Suspend user immediately
-sentyr users suspend user@company.com
-```
-
-**Why it's important**: Immediately blocks compromised or terminated accounts
-**Permissions**: `admin.directory.user` (READ & WRITE)
-**Access**: READ & WRITE ⚠️
-
----
-
-#### 17. **Restore User** - Reactivate suspended account
-
-```bash
-# Restore suspended user
-sentyr users restore user@company.com
-```
-
-**Why it's important**: Reactivates accidentally suspended accounts
-**Permissions**: `admin.directory.user` (READ & WRITE)
-**Access**: READ & WRITE ⚠️
-
----
-
-#### 18. **Delete User** - Permanently remove account
-
-```bash
-# Delete user (permanent!)
-sentyr users delete user@company.com
-```
-
-**Why it's important**: Removes terminated employee accounts
-**Permissions**: `admin.directory.user` (READ & WRITE)
-**Access**: READ & WRITE ⚠️ **PERMANENT**
-
----
-
-### 📦 **Bulk Operations** (READ & WRITE)
-
-#### 19. **Bulk Create Users** - Create multiple users from CSV
-
-```bash
-# Dry-run first (READ-ONLY)
-sentyr bulk create-users users.csv --dry-run
-
-# Execute (WRITE)
-sentyr bulk create-users users.csv
-```
-
-**CSV Format**: `email,first_name,last_name,password,org_unit`
-**Why it's important**: Automates mass employee onboarding
-**Permissions**: `admin.directory.user` (READ & WRITE)
-**Access**: READ & WRITE ⚠️
-
----
-
-#### 20. **Bulk Suspend Users** - Suspend multiple users from CSV
-
-```bash
-# Dry-run first (READ-ONLY)
-sentyr bulk suspend-users users.csv --dry-run
-
-# Execute (WRITE)
-sentyr bulk suspend-users users.csv
-```
-
-**CSV Format**: `email`
-**Why it's important**: Mass account suspension for security incidents
-**Permissions**: `admin.directory.user` (READ & WRITE)
-**Access**: READ & WRITE ⚠️
-
----
-
-#### 21. **Export Users** - Export all users to CSV
-
-```bash
-# Export all users
-sentyr bulk export-users --output all-users.csv
-```
-
-**Why it's important**: Backup user data or migrate to other systems
-**Permissions**: `admin.directory.user.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-### 👋 **Employee Offboarding** (READ & WRITE)
-
-#### 22. **Offboard User** - Automated employee offboarding
-
-```bash
-# Dry-run first (READ-ONLY)
-sentyr offboard user@company.com \
-  --transfer-to manager@company.com \
-  --dry-run
-
-# Execute (WRITE)
-sentyr offboard user@company.com \
-  --transfer-to manager@company.com \
-  --execute
-```
-
-**What it does**:
-1. Suspends user account
-2. Transfers Drive file ownership
-3. Removes from all groups
-4. Revokes OAuth tokens
-5. Backs up user data
-
-**Why it's important**: Ensures secure employee termination
-**Permissions**: `admin.directory.user`, `drive` (READ & WRITE)
-**Access**: READ & WRITE ⚠️
-
----
-
-### 🏢 **Organizational Unit Management** (READ & WRITE)
-
-#### 23. **List OUs** - View organizational structure
-
-```bash
-# List all OUs
-sentyr ou list
-
-# Filter by parent
-sentyr ou list --parent "/Engineering"
-
-# Export to CSV
-sentyr ou list --output ous.csv
-```
-
-**Why it's important**: Understand organizational structure
-**Permissions**: `admin.directory.orgunit.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-#### 24. **Create OU** - Create organizational unit
-
-```bash
-# Create new OU
-sentyr ou create "Engineering" \
-  --parent "/" \
-  --description "Engineering team"
-```
-
-**Why it's important**: Organize users by department
-**Permissions**: `admin.directory.orgunit` (READ & WRITE)
-**Access**: READ & WRITE ⚠️
-
----
-
-#### 25. **Update OU** - Modify organizational unit
-
-```bash
-# Update OU
-sentyr ou update "/Engineering" \
-  --name "Engineering Team" \
-  --description "Updated description"
-```
-
-**Why it's important**: Maintain organizational structure
-**Permissions**: `admin.directory.orgunit` (READ & WRITE)
-**Access**: READ & WRITE ⚠️
-
----
-
-#### 26. **Delete OU** - Remove organizational unit
-
-```bash
-# Delete OU
-sentyr ou delete "/Engineering" --confirm
-```
-
-**Why it's important**: Clean up unused organizational units
-**Permissions**: `admin.directory.orgunit` (READ & WRITE)
-**Access**: READ & WRITE ⚠️
-
----
-
-### 🏢 **Calendar Resource Management** (READ & WRITE)
-
-#### 27. **List Resources** - View conference rooms & equipment
-
-```bash
-# List all resources
-sentyr resources list
-
-# Export to CSV
-sentyr resources list --output resources.csv
-```
-
-**Why it's important**: Manage conference rooms and equipment
-**Permissions**: `admin.directory.resource.calendar.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-#### 28. **Create Resource** - Add conference room
-
-```bash
-# Create conference room
-sentyr resources create "Conference Room A" \
-  --type CONFERENCE_ROOM \
-  --capacity 10 \
-  --building "Building-1" \
-  --floor "2nd Floor"
-```
-
-**Why it's important**: Manage bookable resources
-**Permissions**: `admin.directory.resource.calendar` (READ & WRITE)
-**Access**: READ & WRITE ⚠️
-
----
-
-#### 29. **Update Resource** - Modify resource details
-
-```bash
-# Update resource
-sentyr resources update <resource-id> \
-  --capacity 12 \
-  --description "Updated room"
-```
-
-**Why it's important**: Keep resource information current
-**Permissions**: `admin.directory.resource.calendar` (READ & WRITE)
-**Access**: READ & WRITE ⚠️
-
----
-
-#### 30. **Delete Resource** - Remove resource
-
-```bash
-# Delete resource
-sentyr resources delete <resource-id> --confirm
-```
-
-**Why it's important**: Remove decommissioned resources
-**Permissions**: `admin.directory.resource.calendar` (READ & WRITE)
-**Access**: READ & WRITE ⚠️
-
----
-
-### 💾 **Backup & Export** (READ-ONLY)
-
-#### 31. **Backup Users** - Export all user data
-
-```bash
-# Backup users to JSON
-sentyr backup users --format json --backup-dir ./backups
-
-# Backup to CSV
-sentyr backup users --format csv
-```
-
-**Why it's important**: Regular backups for disaster recovery
-**Permissions**: `admin.directory.user.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-#### 32. **Backup Groups** - Export all group data
-
-```bash
-# Backup groups
-sentyr backup groups --format json --backup-dir ./backups
-```
-
-**Why it's important**: Backup group configurations
-**Permissions**: `admin.directory.group.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-#### 33. **Backup OUs** - Export organizational structure
-
-```bash
-# Backup organizational units
-sentyr backup org-units --format json --backup-dir ./backups
-```
-
-**Why it's important**: Backup organizational structure
-**Permissions**: `admin.directory.orgunit.readonly`
-**Access**: READ-ONLY ✅
-
----
-
-#### 34. **Full Backup** - Backup everything
-
-```bash
-# Full backup (users, groups, OUs)
-sentyr backup full --format json --backup-dir ./backups
-```
-
-**Why it's important**: Complete disaster recovery backup
-**Permissions**: Multiple readonly scopes
-**Access**: READ-ONLY ✅
-
----
-
-#### 35. **List Backups** - View backup history
-
-```bash
-# List all backups
-sentyr backup list --backup-dir ./backups
-```
-
-**Why it's important**: Track backup history
-**Permissions**: None (local files)
-**Access**: READ-ONLY ✅
-
----
-
-### 📊 **Compliance Reporting** (READ-ONLY)
-
-#### 36. **Generate Compliance Report** - GDPR, HIPAA, SOC2, etc.
-
-```bash
-# GDPR compliance report
-sentyr compliance report --framework gdpr --output gdpr-report.html
-
-# HIPAA compliance report
-sentyr compliance report --framework hipaa --output hipaa-report.html
-
-# SOC 2 compliance report
-sentyr compliance report --framework soc2 --output soc2-report.html
-```
-
-**Supported Frameworks**: GDPR, HIPAA, SOC2, PCI-DSS, FERPA, FedRAMP
-**Why it's important**: Automated compliance reporting
-**Permissions**: Multiple readonly scopes
-**Access**: READ-ONLY ✅
-
----
-
-### 📈 **Monitoring & Alerting** (READ-ONLY)
-
-#### 37. **Health Check** - System health status
-
-```bash
-# Check system health
-sentyr monitor health
-```
-
-**Why it's important**: Verify Sentyr is working correctly
-**Permissions**: None (local check)
-**Access**: READ-ONLY ✅
-
----
-
-#### 38. **Export Metrics** - Prometheus metrics
-
-```bash
-# Export metrics
-sentyr metrics export --output metrics.txt
-
-# Export as JSON
-sentyr metrics export --format json --output metrics.json
-```
-
-**Why it's important**: Monitor Sentyr performance
-**Permissions**: None (local metrics)
-**Access**: READ-ONLY ✅
-
----
-
-#### 39. **Serve Metrics** - Prometheus HTTP endpoint
-
-```bash
-# Start metrics server
-sentyr metrics serve --port 9090
-```
-
-**Why it's important**: Integrate with Prometheus monitoring
-**Permissions**: None (local server)
-**Access**: READ-ONLY ✅
-
----
-
-### 🔄 **Automated Workflows** (READ-ONLY + Alerts)
-
-#### 40. **External PII Alert Workflow** - Automated PII detection & alerts
-
-```bash
-# Scan for external PII and send alerts
-sentyr workflow external-pii-alert \
-  --domain company.com \
-  --alert-email security@company.com \
-  --alert-webhook https://siem.company.com/webhook
-```
-
-**Why it's important**: Automated security monitoring
-**Permissions**: `drive.readonly` + alert permissions
-**Access**: READ-ONLY (scans) + WRITE (sends alerts) ⚠️
-
----
-
-#### 41. **Gmail External PII Alert** - Email attachment monitoring
-
-```bash
-# Scan Gmail for external PII
-sentyr workflow gmail-external-pii-alert \
-  --domain company.com \
-  --user user@company.com \
-  --days-back 7 \
-  --alert-email security@company.com
-```
-
-**Why it's important**: Monitor email attachments for data leaks
-**Permissions**: `gmail.readonly` + alert permissions
-**Access**: READ-ONLY (scans) + WRITE (sends alerts) ⚠️
-
----
-
-### ⏰ **Scheduled Scanning** (READ-ONLY)
-
-#### 42. **Schedule Scan** - Automated recurring scans
-
-```bash
-# Schedule daily file scan
-sentyr schedule add \
-  --name "daily-file-scan" \
-  --command "scan files --external-only --check-pii" \
-  --cron "0 2 * * *"  # 2 AM daily
-```
-
-**Why it's important**: Continuous security monitoring
-**Permissions**: Same as scheduled command
-**Access**: READ-ONLY (for scans) ✅
-
----
-
-#### 43. **List Schedules** - View scheduled scans
-
-```bash
-# List all scheduled scans
-sentyr schedule list
-```
-
-**Why it's important**: Manage automated scans
-**Permissions**: None (local config)
-**Access**: READ-ONLY ✅
-
----
-
-### 🎨 **Custom PII Patterns** (Configuration)
-
-#### 44. **Add Custom PII Pattern** - Industry-specific detection
-
-```bash
-# Add custom pattern
-sentyr custom-pii add \
-  --name "Employee ID" \
-  --pattern "EMP-\d{6}" \
-  --category "CUSTOM"
-```
-
-**Why it's important**: Detect industry-specific sensitive data
-**Permissions**: None (local config)
-**Access**: Configuration ⚙️
-
----
-
-#### 45. **List Custom Patterns** - View custom patterns
-
-```bash
-# List all custom patterns
-sentyr custom-pii list
-```
-
-**Why it's important**: Manage custom PII detection
-**Permissions**: None (local config)
-**Access**: READ-ONLY ✅
-
----
-
-### 📄 **Report Generation** (READ-ONLY)
-
-#### 46. **Generate HTML Dashboard** - Visual reports
-
-```bash
-# Generate HTML dashboard
-sentyr report generate --format html --output dashboard.html
-```
-
-**Why it's important**: Executive-friendly security reports
-**Permissions**: None (uses existing scan data)
-**Access**: READ-ONLY ✅
-
----
-
-### 🔧 **Configuration & Testing**
-
-#### 47. **Initialize Config** - Setup wizard
-
-```bash
-# Interactive setup
-sentyr init
-```
-
-**Why it's important**: Easy initial configuration
-**Permissions**: None (local config)
-**Access**: Configuration ⚙️
-
----
-
-#### 48. **Test Connection** - Verify setup
-
-```bash
-# Test Google Workspace connection
-sentyr test
-```
-
-**Why it's important**: Verify credentials and permissions
-**Permissions**: Minimal (connection test)
-**Access**: READ-ONLY ✅
-
----
-
-#### 49. **Show Config** - View current configuration
-
-```bash
-# Display current config
-sentyr config
-```
-
-**Why it's important**: Verify configuration
-**Permissions**: None (local config)
-**Access**: READ-ONLY ✅
-
----
-
-#### 50. **Version Info** - Show version
-
-```bash
-# Show version
-sentyr version
-```
-
-**Why it's important**: Track Sentyr version
-**Permissions**: None
-**Access**: READ-ONLY ✅
-
----
-
-## 🔑 Required OAuth Scopes
-
-### READ-ONLY Scopes (Safe for security scanning)
-
-Use these scopes if you only want to **scan and monitor** without making changes:
-
-```
-# User & Group Management (READ-ONLY)
-https://www.googleapis.com/auth/admin.directory.user.readonly
-https://www.googleapis.com/auth/admin.directory.group.readonly
-https://www.googleapis.com/auth/admin.directory.orgunit.readonly
-
-# Device Management (READ-ONLY)
-https://www.googleapis.com/auth/admin.directory.device.mobile.readonly
-https://www.googleapis.com/auth/admin.directory.device.chromeos.readonly
-
-# Resource Management (READ-ONLY)
-https://www.googleapis.com/auth/admin.directory.resource.calendar.readonly
-
-# Data Access (READ-ONLY)
-https://www.googleapis.com/auth/drive.readonly
-https://www.googleapis.com/auth/gmail.readonly
-https://www.googleapis.com/auth/gmail.settings.basic.readonly
-https://www.googleapis.com/auth/calendar.readonly
-
-# Audit & Compliance (READ-ONLY)
-https://www.googleapis.com/auth/admin.reports.audit.readonly
-https://www.googleapis.com/auth/ediscovery.readonly
-
-# Licensing (READ-ONLY)
-https://www.googleapis.com/auth/apps.licensing
-```
-
-### READ & WRITE Scopes (Required for user/resource management)
-
-⚠️ **Only add these if you need to create/modify/delete users, groups, or resources:**
-
-```
-# User & Group Management (READ & WRITE)
-https://www.googleapis.com/auth/admin.directory.user
-https://www.googleapis.com/auth/admin.directory.group
-https://www.googleapis.com/auth/admin.directory.orgunit
-
-# Resource Management (READ & WRITE)
-https://www.googleapis.com/auth/admin.directory.resource.calendar
-
-# Data Management (READ & WRITE)
-https://www.googleapis.com/auth/drive
-```
-
-### Scope Recommendations by Use Case
-
-| Use Case | Required Scopes | Access Level |
-|----------|----------------|--------------|
-| **Security Scanning Only** | All `.readonly` scopes | READ-ONLY ✅ |
-| **Compliance Reporting** | All `.readonly` scopes | READ-ONLY ✅ |
-| **User Provisioning** | `admin.directory.user` | READ & WRITE ⚠️ |
-| **Employee Offboarding** | `admin.directory.user`, `drive` | READ & WRITE ⚠️ |
-| **OU Management** | `admin.directory.orgunit` | READ & WRITE ⚠️ |
-| **Resource Management** | `admin.directory.resource.calendar` | READ & WRITE ⚠️ |
-
-**⚠️ Important**: If you only want READ-ONLY scanning, use only the `.readonly` scopes above!
-
----
-
-## 📖 Complete Setup Guide
-
-### Step 1: Create Service Account
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a new project or select existing
-3. Enable APIs:
-   - Admin SDK API
-   - Google Drive API
-   - Gmail API
-   - Calendar API
-   - Reports API
-4. Create Service Account:
-   - IAM & Admin → Service Accounts → Create
-   - Download JSON key file
-
-### Step 2: Enable Domain-Wide Delegation
-
-1. Go to [Google Admin Console](https://admin.google.com/)
-2. Security → API Controls → Domain-wide Delegation
-3. Add your service account client ID
-4. Add OAuth scopes (see above)
-5. Click "Authorize"
-
-### Step 3: Configure Sentyr
-
-```bash
-# Copy example config
-cp examples/basic-config.yaml config.yaml
-
-# Edit config.yaml
-nano config.yaml
-```
-
-```yaml
-google_workspace:
-  domain: "yourcompany.com"
-  credentials_file: "/path/to/service-account.json"
-  impersonate_user: "admin@yourcompany.com"  # Admin user to impersonate
-```
-
-### Step 4: Test Setup
-
-```bash
-poetry run sentyr test
-```
-
-Expected output:
-```
-✓ Configuration loaded successfully
-✓ Credentials validated
-✓ API connection successful
-✓ Domain access confirmed
-```
-
----
-
-## 🎯 Common Use Cases
-
-### For Security Teams
-
-**Daily Security Scan**:
-```bash
-# Scan for external PII exposure
-sentyr scan files --external-only --check-pii --output daily-pii-scan.csv
-
-# Audit OAuth apps
-sentyr scan oauth-apps --min-risk-score 70 --output oauth-audit.csv
-
-# Check for suspicious activity
-sentyr scan audit-logs --days-back 1 --detect-anomalies
-```
-
-**Automated Monitoring**:
-```bash
-# Schedule daily scans
-sentyr schedule add --name "daily-security-scan" \
-  --command "workflow external-pii-alert --alert-email security@company.com" \
-  --cron "0 2 * * *"
-```
-
-### For Compliance Teams
-
-**Quarterly Compliance Reports**:
-```bash
-# Generate GDPR report
-sentyr compliance report --framework gdpr --output gdpr-q1-2024.html
-
-# Generate HIPAA report
-sentyr compliance report --framework hipaa --output hipaa-q1-2024.html
-
-# Generate SOC 2 report
-sentyr compliance report --framework soc2 --output soc2-q1-2024.html
-```
-
-### For IT Admins
-
-**Employee Onboarding**:
-```bash
-# Create new user
-sentyr users create john.doe@company.com \
-  --first-name John --last-name Doe \
-  --password "TempPass123!" --org-unit "/Engineering"
-```
-
-**Employee Offboarding**:
-```bash
-# Automated offboarding
-sentyr offboard john.doe@company.com \
-  --transfer-to manager@company.com --execute
-```
-
-**Bulk Operations**:
-```bash
-# Create multiple users from CSV
-sentyr bulk create-users new-hires.csv
-
-# Export all users for backup
-sentyr bulk export-users --output all-users-backup.csv
-```
-
-### For Executives
-
-**Monthly Dashboard**:
-```bash
-# Generate HTML dashboard
-sentyr report generate --format html --output monthly-dashboard.html
-```
+## Roadmap
+
+The framework is designed to be extended with additional agents and capabilities:
+
+**Planned Agents:**
+- Vulnerability Management Agent
+- Detection Engineering Agent
+- Threat Hunting Agent
+- Compliance Reporting Agent
+- Brand Protection Agent
+
+**Planned Features:**
+- Multi-agent orchestration workflows
+- Agent marketplace for community contributions
+- Enhanced ML models (LSTM, Transformers)
+- Real-time streaming analytics
+- Advanced forensics capabilities
+
+## Contributing
+
+We welcome contributions! Areas where you can help:
+- New agent implementations
+- Additional security event parsers
+- Integration with more security tools
+- Documentation improvements
+- Bug fixes and performance optimizations
+
+## License
+
+See [LICENSE](LICENSE) file for details.
+
+## Support
+
+- **Documentation**: See `docs/` directory
+- **Issues**: GitHub Issues
+- **Discussions**: GitHub Discussions
+
+## Acknowledgments
+
+Built with:
+- [Anthropic Claude](https://www.anthropic.com/) - AI reasoning engine
+- [FastAPI](https://fastapi.tiangolo.com/) - API framework
+- [Pydantic](https://pydantic-docs.helpmanual.io/) - Data validation
+- [scikit-learn](https://scikit-learn.org/) - Machine learning
+- [structlog](https://www.structlog.org/) - Structured logging
 

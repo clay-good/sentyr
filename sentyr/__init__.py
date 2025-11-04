@@ -1,6 +1,3 @@
-"""Sentyr: Open-source Google Workspace security and compliance tool."""
+"""Sentyr: AI-powered security event analysis framework."""
 
-__version__ = "0.1.0"
-__author__ = "Sentyr Contributors"
-__license__ = "MIT"
-
+__version__ = "0.30.0"
