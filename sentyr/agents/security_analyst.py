@@ -916,50 +916,177 @@ SECURITY EVENT DATA:
         raw_response: str,
         tokens_used: int
     ) -> AnalysisResult:
-        """Parse LLM response into structured AnalysisResult."""
+        """
+        Parse LLM response into structured AnalysisResult with comprehensive validation.
+
+        Validation Steps:
+        1. JSON extraction and parsing
+        2. Required field presence check
+        3. Data type validation
+        4. Value range validation (risk_score 0-10, confidence 0-1)
+        5. MITRE technique ID format validation
+        6. Evidence quality assessment
+        """
 
         import re
+
+        # Step 1: Clean and extract JSON
         cleaned_response = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', raw_response)
 
         try:
             response_json = json.loads(cleaned_response)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            logger.warning(f"Initial JSON parse failed: {e}. Attempting extraction...")
             start = cleaned_response.find('{')
             end = cleaned_response.rfind('}') + 1
             if start != -1 and end > start:
-                response_json = json.loads(cleaned_response[start:end])
+                try:
+                    response_json = json.loads(cleaned_response[start:end])
+                    logger.info("Successfully extracted JSON from response")
+                except json.JSONDecodeError as e2:
+                    logger.error(f"JSON extraction failed: {e2}")
+                    raise ValueError(f"Could not parse LLM response as JSON: {e2}")
             else:
-                raise ValueError("Could not parse LLM response as JSON")
+                logger.error("No JSON object found in LLM response")
+                raise ValueError("Could not find JSON object in LLM response")
 
+        # Step 2: Validate required fields
+        required_fields = ["five_w1h", "executive_summary", "risk_score", "confidence"]
+        missing_fields = [field for field in required_fields if field not in response_json]
+
+        if missing_fields:
+            logger.warning(f"LLM response missing required fields: {missing_fields}")
+            # Continue with defaults rather than failing
+
+        # Step 3: Validate and parse risk_score
+        try:
+            risk_score = float(response_json.get("risk_score", 5.0))
+            if not (0.0 <= risk_score <= 10.0):
+                logger.warning(f"Risk score {risk_score} out of range [0-10], clamping to valid range")
+                risk_score = max(0.0, min(10.0, risk_score))
+        except (ValueError, TypeError) as e:
+            logger.error(f"Invalid risk_score value: {e}. Using default 5.0")
+            risk_score = 5.0
+
+        # Step 4: Validate and parse confidence
+        try:
+            confidence = float(response_json.get("confidence", 0.7))
+            if not (0.0 <= confidence <= 1.0):
+                logger.warning(f"Confidence {confidence} out of range [0-1], clamping to valid range")
+                confidence = max(0.0, min(1.0, confidence))
+        except (ValueError, TypeError) as e:
+            logger.error(f"Invalid confidence value: {e}. Using default 0.7")
+            confidence = 0.7
+
+        # Step 5: Parse and validate MITRE techniques
         mitre_techniques = []
-        for mt in response_json.get("mitre_techniques", []):
-            mitre_techniques.append(MitreAttack(
-                technique_id=mt["technique_id"],
-                technique_name=mt["technique_name"],
-                tactic=mt["tactic"],
-                confidence=mt.get("confidence", 0.7),
-                evidence=mt.get("evidence", "")  # Capture evidence from enhanced prompt
-            ))
+        mitre_id_pattern = re.compile(r'^T\d{4}(\.\d{3})?$')  # Validates T1234 or T1234.001 format
 
-        five_w1h_data = response_json.get("five_w1h", {})
-        five_w1h = FiveW1H(
-            who=five_w1h_data.get("who", "Unknown actors"),
-            what=five_w1h_data.get("what", "Security event detected"),
-            when=five_w1h_data.get("when", "Timestamp in event data"),
-            where=five_w1h_data.get("where", "Systems listed in event"),
-            why=five_w1h_data.get("why", "Motivation unclear"),
-            how=five_w1h_data.get("how", "Techniques listed in MITRE mapping")
+        for mt in response_json.get("mitre_techniques", []):
+            try:
+                technique_id = mt.get("technique_id", "")
+
+                # Validate MITRE technique ID format
+                if not mitre_id_pattern.match(technique_id):
+                    logger.warning(f"Invalid MITRE technique ID format: {technique_id}")
+                    continue
+
+                # Validate technique confidence
+                tech_confidence = float(mt.get("confidence", 0.7))
+                if not (0.0 <= tech_confidence <= 1.0):
+                    logger.warning(f"Technique confidence {tech_confidence} out of range, clamping")
+                    tech_confidence = max(0.0, min(1.0, tech_confidence))
+
+                # Validate evidence is present and meaningful
+                evidence = mt.get("evidence", "")
+                if not evidence or len(evidence.strip()) < 10:
+                    logger.warning(
+                        f"MITRE technique {technique_id} has insufficient evidence: '{evidence[:50]}'"
+                    )
+
+                mitre_techniques.append(MitreAttack(
+                    technique_id=technique_id,
+                    technique_name=mt.get("technique_name", "Unknown Technique"),
+                    tactic=mt.get("tactic", "Unknown Tactic"),
+                    confidence=tech_confidence,
+                    evidence=evidence
+                ))
+            except Exception as e:
+                logger.error(f"Failed to parse MITRE technique: {e}")
+                continue
+
+        # Log analysis quality metrics
+        if len(mitre_techniques) == 0:
+            logger.warning("No valid MITRE techniques in LLM response")
+
+        evidence_quality_score = sum(
+            1 for mt in mitre_techniques if len(mt.evidence) >= 50
+        ) / max(len(mitre_techniques), 1)
+
+        logger.info(
+            f"Analysis quality: {len(mitre_techniques)} MITRE techniques, "
+            f"evidence quality score: {evidence_quality_score:.2f}"
         )
+
+        # Step 6: Parse 5W1H with validation
+        five_w1h_data = response_json.get("five_w1h", {})
+
+        # Check for empty or placeholder responses
+        placeholder_phrases = ["unknown", "unclear", "tbd", "n/a", "not applicable", "requires investigation"]
+
+        def validate_w1h_field(value: str, field_name: str) -> str:
+            """Validate 5W1H field has meaningful content."""
+            if not value or len(value.strip()) < 5:
+                logger.warning(f"5W1H field '{field_name}' has insufficient content")
+                return f"Requires further investigation ({field_name})"
+
+            value_lower = value.lower().strip()
+            if any(phrase in value_lower for phrase in placeholder_phrases) and len(value) < 20:
+                logger.warning(f"5W1H field '{field_name}' appears to be placeholder text")
+
+            return value
+
+        five_w1h = FiveW1H(
+            who=validate_w1h_field(five_w1h_data.get("who", "Unknown actors"), "who"),
+            what=validate_w1h_field(five_w1h_data.get("what", "Security event detected"), "what"),
+            when=validate_w1h_field(five_w1h_data.get("when", "Timestamp in event data"), "when"),
+            where=validate_w1h_field(five_w1h_data.get("where", "Systems listed in event"), "where"),
+            why=validate_w1h_field(five_w1h_data.get("why", "Motivation unclear"), "why"),
+            how=validate_w1h_field(five_w1h_data.get("how", "Techniques listed in MITRE mapping"), "how")
+        )
+
+        # Step 7: Validate executive summary quality
+        executive_summary = response_json.get("executive_summary", "")
+        if len(executive_summary) < 50:
+            logger.warning(
+                f"Executive summary is too short ({len(executive_summary)} chars). "
+                "LLM may not have provided sufficient analysis."
+            )
+
+        # Step 8: Validate immediate actions have priority/timeframe
+        immediate_actions = response_json.get("immediate_actions", [])
+        validated_actions = []
+
+        for action in immediate_actions:
+            if isinstance(action, str):
+                # Check if action has priority indicator
+                has_priority = any(
+                    keyword in action.upper()
+                    for keyword in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "PRIORITY"]
+                )
+                if not has_priority:
+                    logger.debug(f"Action missing priority indicator: {action[:50]}")
+                validated_actions.append(action)
 
         return AnalysisResult(
             event_id=event.event_id,
             five_w1h=five_w1h,
-            executive_summary=response_json.get("executive_summary", ""),
-            risk_score=float(response_json.get("risk_score", 5.0)),
-            confidence=float(response_json.get("confidence", 0.7)),
+            executive_summary=executive_summary,
+            risk_score=risk_score,
+            confidence=confidence,
             attack_chain=response_json.get("attack_chain", []),
             mitre_techniques=mitre_techniques,
-            immediate_actions=response_json.get("immediate_actions", []),
+            immediate_actions=validated_actions,
             short_term_recommendations=response_json.get("short_term_recommendations", []),
             long_term_recommendations=response_json.get("long_term_recommendations", []),
             investigation_queries=response_json.get("investigation_queries", []),
