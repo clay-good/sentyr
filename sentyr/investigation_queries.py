@@ -3,12 +3,15 @@ Cross-Platform Investigation Query Generator
 
 Generates recommended queries for investigating security threats
 across Datadog, AWS CloudTrail, GCP Audit Logs, and Google Workspace.
+
+Features input sanitization to prevent injection attacks.
 """
 
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from sentyr.models import SecurityEvent
 from sentyr.logger import get_logger
+from sentyr.input_sanitizer import get_sanitizer
 
 logger = get_logger(__name__)
 
@@ -39,7 +42,8 @@ class InvestigationQueryGenerator:
 
     def __init__(self):
         """Initialize query generator."""
-        logger.info("Investigation query generator initialized")
+        self.sanitizer = get_sanitizer()
+        logger.info("Investigation query generator initialized with input sanitization")
 
     def generate_queries(
         self,
@@ -83,7 +87,7 @@ class InvestigationQueryGenerator:
         event: SecurityEvent,
         ioc_enrichment: Optional[Dict[str, Any]]
     ) -> Dict[str, List[str]]:
-        """Extract IOCs from event and enrichment data."""
+        """Extract and sanitize IOCs from event and enrichment data."""
         iocs = {
             "ips": [],
             "domains": [],
@@ -93,39 +97,52 @@ class InvestigationQueryGenerator:
             "hashes": []
         }
 
-        # Extract from technical indicators
+        # Extract from technical indicators with sanitization
         for indicator in event.technical_indicators:
             value = indicator.value
             ioc_type = indicator.indicator_type.lower()
 
-            if ioc_type in ["ip", "source_ip", "dest_ip"]:
-                iocs["ips"].append(value)
-            elif ioc_type in ["domain", "hostname"]:
-                iocs["domains"].append(value)
-            elif ioc_type in ["url"]:
-                iocs["urls"].append(value)
-            elif ioc_type in ["user", "username", "user_id"]:
-                iocs["users"].append(value)
-            elif ioc_type in ["host", "hostname"]:
-                iocs["hosts"].append(value)
-            elif ioc_type in ["hash", "md5", "sha1", "sha256"]:
-                iocs["hashes"].append(value)
+            # Sanitize based on IOC type
+            sanitized_value = self.sanitizer.validate_and_sanitize_ioc(value, ioc_type)
 
-        # Extract from enrichment
+            if not sanitized_value:
+                logger.warning(f"Invalid IOC detected and skipped: {ioc_type}={value[:50]}")
+                continue
+
+            if ioc_type in ["ip", "source_ip", "dest_ip"]:
+                iocs["ips"].append(sanitized_value)
+            elif ioc_type in ["domain", "hostname"]:
+                iocs["domains"].append(sanitized_value)
+            elif ioc_type in ["url"]:
+                iocs["urls"].append(sanitized_value)
+            elif ioc_type in ["user", "username", "user_id"]:
+                iocs["users"].append(sanitized_value)
+            elif ioc_type in ["host", "hostname"]:
+                iocs["hosts"].append(sanitized_value)
+            elif ioc_type in ["hash", "md5", "sha1", "sha256"]:
+                iocs["hashes"].append(sanitized_value)
+
+        # Extract from enrichment with sanitization
         if ioc_enrichment:
             for ioc_value, enrichment in ioc_enrichment.items():
                 if hasattr(enrichment, 'ioc_type'):
+                    sanitized_value = self.sanitizer.validate_and_sanitize_ioc(ioc_value, enrichment.ioc_type)
+
+                    if not sanitized_value:
+                        continue
+
                     if enrichment.ioc_type == "ip":
-                        iocs["ips"].append(ioc_value)
+                        iocs["ips"].append(sanitized_value)
                     elif enrichment.ioc_type == "domain":
-                        iocs["domains"].append(ioc_value)
+                        iocs["domains"].append(sanitized_value)
                     elif enrichment.ioc_type == "url":
-                        iocs["urls"].append(ioc_value)
+                        iocs["urls"].append(sanitized_value)
 
         # Deduplicate
         for key in iocs:
             iocs[key] = list(set(iocs[key]))
 
+        logger.info(f"Extracted and sanitized IOCs: {sum(len(v) for v in iocs.values())} total")
         return iocs
 
     def _generate_datadog_queries(
@@ -139,9 +156,11 @@ class InvestigationQueryGenerator:
         # Query 1: Find all logs from suspicious IPs
         if iocs["ips"]:
             for ip in iocs["ips"][:5]:  # Limit to first 5 IPs
+                # Sanitize IP for Datadog query
+                safe_ip = self.sanitizer.sanitize_for_datadog(ip)
                 queries.append(InvestigationQuery(
                     platform="datadog",
-                    query=f"source:* @network.client.ip:{ip}",
+                    query=f"source:* @network.client.ip:{safe_ip}",
                     description=f"Find all logs from suspicious IP {ip}",
                     timeframe="last_7_days",
                     priority="high"

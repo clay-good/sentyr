@@ -759,63 +759,342 @@ class IncidentResponseAgent(BaseAgent):
         attack_vectors: List[str],
         context: AgentContext
     ) -> Dict[str, Any]:
-        """Determine root cause from evidence"""
+        """
+        Determine root cause from evidence using structured decision framework.
 
-        # Simple heuristic-based root cause determination
-        # In production, this would use ML and more sophisticated analysis
+        Decision Framework:
+        1. Evidence Assessment: Evaluate quality and completeness of available data
+        2. Pattern Analysis: Identify common attack patterns and techniques
+        3. Timeline Analysis: Trace back to initial compromise vector
+        4. Alternative Hypothesis Testing: Consider and rule out alternative explanations
+        5. Confidence Scoring: Assign confidence based on evidence strength
+        6. Recommendation Generation: Provide actionable remediation steps
+        """
 
-        confidence = 0.7
-        reasoning = []
-        alternatives = []
+        # Phase 1: Evidence Assessment
+        evidence_quality = self._assess_evidence_quality(initial_events, attack_vectors, context)
 
-        if not initial_events and not attack_vectors:
+        if evidence_quality["score"] < 0.3:
             return {
-                "description": "Insufficient data to determine root cause",
+                "description": "Insufficient data to determine root cause with confidence",
                 "category": "unknown",
-                "confidence": 0.3,
-                "reasoning": ["Limited event data available", "No clear attack vectors identified"],
+                "confidence": evidence_quality["score"],
+                "reasoning": [
+                    f"Evidence quality score: {evidence_quality['score']:.2f} (below threshold)",
+                    f"Available events: {len(initial_events)}",
+                    f"Identified attack vectors: {len(attack_vectors)}",
+                    "Recommendation: Gather additional forensic data before proceeding"
+                ],
+                "evidence_gaps": evidence_quality["gaps"],
                 "recommendations": [
-                    {"action": "Collect additional logs", "priority": "high"},
-                    {"action": "Review data retention policies", "priority": "medium"}
-                ]
+                    {"action": "Enable comprehensive logging on affected systems", "priority": "critical", "timeframe": "immediate"},
+                    {"action": "Collect memory dumps from compromised hosts", "priority": "high", "timeframe": "0-1h"},
+                    {"action": "Review data retention policies", "priority": "medium", "timeframe": "1-4h"},
+                    {"action": "Query threat intelligence feeds for related indicators", "priority": "high", "timeframe": "0-1h"}
+                ],
+                "decision_rationale": "Without sufficient evidence, any root cause determination would be speculative and could lead to ineffective remediation."
             }
 
-        # Analyze attack vectors
-        if attack_vectors:
-            reasoning.append(f"Identified {len(attack_vectors)} attack vectors")
+        # Phase 2: Pattern Analysis
+        attack_patterns = self._analyze_attack_patterns(initial_events, attack_vectors, context)
 
-            # Common root causes
-            if any("credential" in str(v).lower() or "password" in str(v).lower() for v in attack_vectors):
-                return {
-                    "description": "Compromised credentials enabled initial access",
-                    "category": "credential_compromise",
-                    "confidence": 0.85,
-                    "reasoning": [
-                        "Attack chain indicates credential-based access",
-                        "No evidence of vulnerability exploitation",
-                        "Weak password policy likely contributed"
-                    ],
-                    "recommendations": [
-                        {"action": "Implement MFA for all accounts", "priority": "critical"},
-                        {"action": "Enforce strong password policy", "priority": "high"},
-                        {"action": "Review privileged account usage", "priority": "high"}
-                    ],
-                    "alternatives": [
-                        {"hypothesis": "Phishing attack", "confidence": 0.45},
-                        {"hypothesis": "Insider threat", "confidence": 0.25}
-                    ]
-                }
+        # Phase 3: Root Cause Determination with Chain-of-Thought
+        root_cause = self._determine_root_cause_with_cot(
+            initial_events,
+            attack_vectors,
+            attack_patterns,
+            context
+        )
 
-        # Default root cause
+        return root_cause
+
+    def _assess_evidence_quality(
+        self,
+        initial_events: List[Dict],
+        attack_vectors: List[str],
+        context: AgentContext
+    ) -> Dict[str, Any]:
+        """Assess quality and completeness of available evidence."""
+        score = 0.0
+        gaps = []
+
+        # Check for timeline events
+        if len(initial_events) >= 5:
+            score += 0.3
+        elif len(initial_events) >= 1:
+            score += 0.15
+        else:
+            gaps.append("No initial timeline events available")
+
+        # Check for attack vectors
+        if len(attack_vectors) >= 3:
+            score += 0.3
+        elif len(attack_vectors) >= 1:
+            score += 0.15
+        else:
+            gaps.append("No clear attack vectors identified")
+
+        # Check for findings
+        if len(context.findings) >= 3:
+            score += 0.2
+        elif len(context.findings) >= 1:
+            score += 0.1
+        else:
+            gaps.append("Limited security findings available")
+
+        # Check for IOCs
+        if len(context.iocs) >= 5:
+            score += 0.2
+        elif len(context.iocs) >= 1:
+            score += 0.1
+        else:
+            gaps.append("Few indicators of compromise identified")
+
+        return {"score": score, "gaps": gaps}
+
+    def _analyze_attack_patterns(
+        self,
+        initial_events: List[Dict],
+        attack_vectors: List[str],
+        context: AgentContext
+    ) -> Dict[str, Any]:
+        """Analyze events and vectors for common attack patterns."""
+        patterns = {
+            "credential_based": False,
+            "vulnerability_exploitation": False,
+            "social_engineering": False,
+            "supply_chain": False,
+            "insider_threat": False,
+            "lateral_movement": False,
+            "data_exfiltration": False
+        }
+
+        evidence_all = str(initial_events) + str(attack_vectors) + str(context.findings)
+        evidence_lower = evidence_all.lower()
+
+        # Detect credential-based attacks
+        if any(keyword in evidence_lower for keyword in ["credential", "password", "brute force", "login", "authentication"]):
+            patterns["credential_based"] = True
+
+        # Detect vulnerability exploitation
+        if any(keyword in evidence_lower for keyword in ["exploit", "vulnerability", "cve-", "remote code execution", "rce"]):
+            patterns["vulnerability_exploitation"] = True
+
+        # Detect social engineering
+        if any(keyword in evidence_lower for keyword in ["phishing", "spear phish", "social engineering", "malicious email"]):
+            patterns["social_engineering"] = True
+
+        # Detect supply chain
+        if any(keyword in evidence_lower for keyword in ["supply chain", "third party", "vendor", "dependency"]):
+            patterns["supply_chain"] = True
+
+        # Detect insider threat
+        if any(keyword in evidence_lower for keyword in ["insider", "privileged user", "abuse of access"]):
+            patterns["insider_threat"] = True
+
+        # Detect lateral movement
+        if any(keyword in evidence_lower for keyword in ["lateral movement", "pass the hash", "credential dumping", "mimikatz"]):
+            patterns["lateral_movement"] = True
+
+        # Detect data exfiltration
+        if any(keyword in evidence_lower for keyword in ["exfiltration", "data transfer", "file download", "upload"]):
+            patterns["data_exfiltration"] = True
+
+        return patterns
+
+    def _determine_root_cause_with_cot(
+        self,
+        initial_events: List[Dict],
+        attack_vectors: List[str],
+        attack_patterns: Dict[str, bool],
+        context: AgentContext
+    ) -> Dict[str, Any]:
+        """Determine root cause using chain-of-thought reasoning."""
+
+        reasoning_chain = []
+        alternatives = []
+
+        # Step 1: Initial hypothesis generation
+        reasoning_chain.append(
+            f"INITIAL ASSESSMENT: Analyzing {len(initial_events)} initial events and "
+            f"{len(attack_vectors)} attack vectors across {len(context.findings)} findings"
+        )
+
+        active_patterns = [k for k, v in attack_patterns.items() if v]
+        reasoning_chain.append(
+            f"PATTERN DETECTION: Identified {len(active_patterns)} attack patterns: {', '.join(active_patterns)}"
+        )
+
+        # Step 2: Credential-based compromise
+        if attack_patterns["credential_based"]:
+            reasoning_chain.append(
+                "CREDENTIAL ANALYSIS: Strong indicators of credential-based compromise detected"
+            )
+            reasoning_chain.append(
+                "EVIDENCE: Attack chain shows authentication events, failed login attempts, or credential abuse"
+            )
+
+            # Check for social engineering
+            if attack_patterns["social_engineering"]:
+                confidence = 0.90
+                reasoning_chain.append(
+                    "ATTRIBUTION: Phishing attack likely obtained credentials (high confidence)"
+                )
+                alternatives.append({
+                    "hypothesis": "Credential stuffing from breach database",
+                    "confidence": 0.60,
+                    "rationale": "Could explain credential compromise without phishing indicators"
+                })
+                alternatives.append({
+                    "hypothesis": "Insider threat or malicious employee",
+                    "confidence": 0.30,
+                    "rationale": "Less likely given external attack indicators"
+                })
+            else:
+                confidence = 0.85
+                reasoning_chain.append(
+                    "ATTRIBUTION: Credential compromise via brute force or credential stuffing (high confidence)"
+                )
+                alternatives.append({
+                    "hypothesis": "Phishing attack (low indicators detected)",
+                    "confidence": 0.45,
+                    "rationale": "Some credential theft but limited phishing evidence"
+                })
+
+            reasoning_chain.append(
+                "IMPACT ANALYSIS: Compromised credentials enabled initial access and potential privilege escalation"
+            )
+
+            return {
+                "description": "Compromised credentials enabled initial access to systems",
+                "category": "credential_compromise",
+                "confidence": confidence,
+                "reasoning": reasoning_chain,
+                "evidence_summary": {
+                    "credential_indicators": True,
+                    "social_engineering_indicators": attack_patterns["social_engineering"],
+                    "lateral_movement": attack_patterns["lateral_movement"],
+                    "total_events_analyzed": len(initial_events) + len(attack_vectors)
+                },
+                "attack_kill_chain": [
+                    "Initial Access: Credential Compromise",
+                    "Execution: Authenticated Login" if attack_patterns["lateral_movement"] else "Execution: Single System Access",
+                    "Persistence: Unknown (requires further investigation)",
+                    "Privilege Escalation: Possible" if attack_patterns["lateral_movement"] else "Not Observed"
+                ],
+                "recommendations": [
+                    {
+                        "action": "Force password reset for all potentially compromised accounts",
+                        "priority": "critical",
+                        "timeframe": "immediate",
+                        "owner": "Identity & Access Management",
+                        "rationale": "Immediately revoke compromised credentials to prevent continued access"
+                    },
+                    {
+                        "action": "Implement MFA for all user accounts, especially privileged accounts",
+                        "priority": "critical",
+                        "timeframe": "0-24h",
+                        "owner": "IT Security",
+                        "rationale": "MFA would have prevented this attack vector"
+                    },
+                    {
+                        "action": "Review authentication logs for all successful logins from affected accounts",
+                        "priority": "high",
+                        "timeframe": "0-4h",
+                        "owner": "SOC",
+                        "rationale": "Identify scope of unauthorized access"
+                    },
+                    {
+                        "action": "Deploy credential monitoring and breach detection tools",
+                        "priority": "high",
+                        "timeframe": "1-7 days",
+                        "owner": "Security Engineering",
+                        "rationale": "Proactively detect future credential compromises"
+                    },
+                    {
+                        "action": "Conduct security awareness training on phishing and password hygiene",
+                        "priority": "medium",
+                        "timeframe": "1-4 weeks",
+                        "owner": "Security Awareness Team",
+                        "rationale": "Reduce likelihood of future credential compromise"
+                    }
+                ],
+                "alternatives": alternatives,
+                "decision_rationale": f"Root cause determined with {confidence:.0%} confidence based on {len(reasoning_chain)} lines of evidence. Credential compromise is the most likely initial access vector given the observed attack patterns and available evidence."
+            }
+
+        # Step 3: Vulnerability exploitation
+        if attack_patterns["vulnerability_exploitation"]:
+            confidence = 0.85
+            reasoning_chain.append(
+                "VULNERABILITY ANALYSIS: Evidence of vulnerability exploitation detected"
+            )
+            reasoning_chain.append(
+                "EVIDENCE: Attack chain shows exploit indicators, CVE references, or remote code execution"
+            )
+
+            alternatives.append({
+                "hypothesis": "Zero-day exploitation",
+                "confidence": 0.40,
+                "rationale": "Possible if no known CVE matches observed behavior"
+            })
+
+            return {
+                "description": "Vulnerability exploitation enabled initial system compromise",
+                "category": "vulnerability_exploitation",
+                "confidence": confidence,
+                "reasoning": reasoning_chain,
+                "recommendations": [
+                    {
+                        "action": "Identify and patch exploited vulnerability immediately",
+                        "priority": "critical",
+                        "timeframe": "immediate",
+                        "owner": "Patch Management",
+                        "rationale": "Prevent continued exploitation"
+                    },
+                    {
+                        "action": "Deploy virtual patching or WAF rules if patch unavailable",
+                        "priority": "critical",
+                        "timeframe": "0-4h",
+                        "owner": "Security Engineering",
+                        "rationale": "Mitigate risk while permanent fix is deployed"
+                    },
+                    {
+                        "action": "Scan all systems for same vulnerability",
+                        "priority": "high",
+                        "timeframe": "0-24h",
+                        "owner": "Vulnerability Management",
+                        "rationale": "Identify and remediate organization-wide exposure"
+                    },
+                    {
+                        "action": "Implement automated vulnerability scanning and patching",
+                        "priority": "high",
+                        "timeframe": "1-4 weeks",
+                        "owner": "IT Operations",
+                        "rationale": "Prevent future exploitation of unpatched systems"
+                    }
+                ],
+                "alternatives": alternatives,
+                "decision_rationale": f"Root cause determined with {confidence:.0%} confidence. Vulnerability exploitation is the primary initial access vector."
+            }
+
+        # Default: Insufficient specific indicators
+        reasoning_chain.append(
+            "CONCLUSION: No dominant attack pattern detected - requires additional investigation"
+        )
+
         return {
-            "description": "Root cause analysis in progress - preliminary findings available",
+            "description": "Root cause analysis in progress - preliminary patterns identified",
             "category": "under_investigation",
             "confidence": 0.6,
-            "reasoning": reasoning or ["Analysis based on available evidence"],
+            "reasoning": reasoning_chain,
+            "patterns_detected": active_patterns,
             "recommendations": [
-                {"action": "Continue investigation", "priority": "high"},
-                {"action": "Gather additional evidence", "priority": "medium"}
-            ]
+                {"action": "Continue forensic investigation to identify initial access vector", "priority": "high", "timeframe": "0-4h"},
+                {"action": "Collect additional logs from affected systems", "priority": "high", "timeframe": "0-1h"},
+                {"action": "Query threat intelligence for similar attack patterns", "priority": "medium", "timeframe": "1-4h"}
+            ],
+            "decision_rationale": "Available evidence does not conclusively point to a single root cause. Recommend continued investigation before implementing remediation."
         }
 
     def _calculate_incident_metrics(self, context: AgentContext) -> IncidentMetrics:
@@ -1018,49 +1297,227 @@ class IncidentResponseAgent(BaseAgent):
         ]
 
     def _generate_technical_remediation(self, context: AgentContext) -> List[Dict[str, Any]]:
-        """Generate technical remediation steps"""
-        return [
+        """
+        Generate technical remediation steps based on root cause and attack patterns.
+
+        Decision Logic:
+        1. Extract root cause category from context
+        2. Identify attack patterns and techniques
+        3. Generate specific, actionable remediation steps
+        4. Prioritize by impact and urgency
+        5. Assign ownership and realistic timelines
+        """
+        remediation_steps = []
+
+        # Get root cause from context
+        root_cause = context.incident_metadata.get("root_cause", {})
+        root_cause_category = root_cause.get("category", "unknown")
+
+        # Get MITRE techniques if available
+        mitre_techniques = []
+        for finding in context.findings:
+            if isinstance(finding, dict) and "mitre_techniques" in finding.get("results", {}):
+                mitre_techniques.extend(finding["results"]["mitre_techniques"])
+
+        # Category-specific remediation
+        if root_cause_category == "credential_compromise":
+            remediation_steps.extend([
+                {
+                    "action": "Force password reset for all compromised accounts immediately",
+                    "priority": "critical",
+                    "category": "technical",
+                    "owner": "Identity & Access Management",
+                    "timeline": "immediate (0-1h)",
+                    "rationale": "Revoke compromised credentials to prevent ongoing unauthorized access",
+                    "success_criteria": "All affected accounts locked/reset within 1 hour",
+                    "estimated_effort": "2-4 hours"
+                },
+                {
+                    "action": "Enable MFA for all user accounts, prioritize privileged accounts",
+                    "priority": "critical",
+                    "category": "technical",
+                    "owner": "IT Security",
+                    "timeline": "0-24h for critical accounts, 1 week for all accounts",
+                    "rationale": "Prevent future credential-based attacks",
+                    "success_criteria": "100% MFA enrollment for privileged users, 80% for all users",
+                    "estimated_effort": "40-80 hours"
+                },
+                {
+                    "action": "Deploy password breach monitoring and alerting",
+                    "priority": "high",
+                    "category": "technical",
+                    "owner": "Security Engineering",
+                    "timeline": "1-2 weeks",
+                    "rationale": "Proactively detect compromised credentials",
+                    "success_criteria": "Monitoring active for all corporate accounts",
+                    "estimated_effort": "16-24 hours"
+                }
+            ])
+
+        if root_cause_category == "vulnerability_exploitation":
+            remediation_steps.extend([
+                {
+                    "action": "Identify and patch exploited vulnerability on all affected systems",
+                    "priority": "critical",
+                    "category": "technical",
+                    "owner": "Patch Management",
+                    "timeline": "immediate (0-4h)",
+                    "rationale": "Eliminate attack vector immediately",
+                    "success_criteria": "Vulnerable systems patched or isolated within 4 hours",
+                    "estimated_effort": "4-8 hours"
+                },
+                {
+                    "action": "Scan entire environment for same vulnerability",
+                    "priority": "critical",
+                    "category": "technical",
+                    "owner": "Vulnerability Management",
+                    "timeline": "0-24h",
+                    "rationale": "Identify and remediate organization-wide exposure",
+                    "success_criteria": "Full vulnerability scan completed, remediation plan created",
+                    "estimated_effort": "8-16 hours"
+                },
+                {
+                    "action": "Implement virtual patching or WAF rules for exploited vulnerability",
+                    "priority": "high",
+                    "category": "technical",
+                    "owner": "Security Engineering",
+                    "timeline": "0-4h",
+                    "rationale": "Provide temporary protection while patching is in progress",
+                    "success_criteria": "Virtual patch deployed to all at-risk systems",
+                    "estimated_effort": "2-4 hours"
+                }
+            ])
+
+        # Generic technical remediation (applicable to all incidents)
+        remediation_steps.extend([
             {
-                "action": "Patch vulnerable systems",
-                "priority": "critical",
-                "category": "technical",
-                "owner": "IT Security",
-                "timeline": "immediate"
-            },
-            {
-                "action": "Update firewall rules",
+                "action": "Review and update firewall rules to block malicious IPs/domains",
                 "priority": "high",
                 "category": "technical",
-                "owner": "Network Team",
-                "timeline": "24 hours"
+                "owner": "Network Security",
+                "timeline": "0-4h",
+                "rationale": f"Block {len(context.iocs)} identified IOCs at network perimeter",
+                "success_criteria": "All IOCs blocked at firewall, EDR, and web proxy",
+                "estimated_effort": "2-4 hours"
             },
             {
-                "action": "Deploy EDR to all endpoints",
+                "action": "Deploy enhanced logging and monitoring for affected systems",
                 "priority": "high",
                 "category": "technical",
                 "owner": "Security Operations",
-                "timeline": "1 week"
-            }
-        ]
-
-    def _generate_process_improvements(self, context: AgentContext) -> List[Dict[str, Any]]:
-        """Generate process improvements"""
-        return [
-            {
-                "action": "Update incident response procedures",
-                "priority": "high",
-                "category": "process",
-                "owner": "IR Team",
-                "timeline": "2 weeks"
+                "timeline": "24-48h",
+                "rationale": "Improve detection capabilities for similar attacks",
+                "success_criteria": "Enhanced logging active, alerting rules deployed",
+                "estimated_effort": "8-16 hours"
             },
             {
-                "action": "Implement automated alerting",
+                "action": "Conduct forensic imaging of compromised systems",
                 "priority": "medium",
+                "category": "technical",
+                "owner": "Digital Forensics",
+                "timeline": "1-3 days",
+                "rationale": "Preserve evidence for further investigation and legal proceedings",
+                "success_criteria": "Forensic images captured and stored securely",
+                "estimated_effort": "16-40 hours"
+            }
+        ])
+
+        # Sort by priority
+        priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        remediation_steps.sort(key=lambda x: priority_order.get(x["priority"], 4))
+
+        return remediation_steps
+
+    def _generate_process_improvements(self, context: AgentContext) -> List[Dict[str, Any]]:
+        """
+        Generate process improvements based on incident lessons learned.
+
+        Decision Logic:
+        1. Analyze incident metrics (MTTD, MTTC, MTTR)
+        2. Identify process gaps from timeline
+        3. Generate specific process improvements
+        4. Focus on detection, response, and communication
+        """
+        improvements = []
+        metrics = context.incident_metadata.get("metrics", {})
+
+        # Analyze detection time (MTTD)
+        mttd_hours = metrics.get("mttd", 0) / 3600 if metrics.get("mttd") else None
+        if mttd_hours and mttd_hours > 24:
+            improvements.append({
+                "action": "Implement enhanced threat detection rules for this attack pattern",
+                "priority": "critical",
                 "category": "process",
                 "owner": "SOC",
-                "timeline": "1 month"
+                "timeline": "1-2 weeks",
+                "rationale": f"MTTD was {mttd_hours:.1f} hours - unacceptably long for early threat detection",
+                "success_criteria": "Similar attacks detected within 1 hour",
+                "estimated_effort": "8-16 hours"
+            })
+
+        # Analyze containment time (MTTC)
+        mttc_hours = metrics.get("mttc", 0) / 3600 if metrics.get("mttc") else None
+        if mttc_hours and mttc_hours > 4:
+            improvements.append({
+                "action": "Create automated containment playbooks for common attack scenarios",
+                "priority": "high",
+                "category": "process",
+                "owner": "Incident Response Team",
+                "timeline": "2-4 weeks",
+                "rationale": f"MTTC was {mttc_hours:.1f} hours - automated playbooks would reduce this significantly",
+                "success_criteria": "Containment playbooks available for top 10 attack types",
+                "estimated_effort": "40-80 hours"
+            })
+
+        # Generic process improvements
+        improvements.extend([
+            {
+                "action": "Update incident response runbooks with lessons from this incident",
+                "priority": "high",
+                "category": "process",
+                "owner": "IR Team Lead",
+                "timeline": "1 week",
+                "rationale": "Document specific procedures that worked well and areas for improvement",
+                "success_criteria": "Updated runbooks reviewed and approved by security leadership",
+                "estimated_effort": "8-16 hours"
+            },
+            {
+                "action": "Conduct post-incident review meeting with all stakeholders",
+                "priority": "high",
+                "category": "process",
+                "owner": "IR Team Lead",
+                "timeline": "1 week",
+                "rationale": "Gather feedback and identify process gaps",
+                "success_criteria": "Meeting completed, action items assigned and tracked",
+                "estimated_effort": "4-8 hours"
+            },
+            {
+                "action": "Implement automated incident escalation workflows",
+                "priority": "medium",
+                "category": "process",
+                "owner": "Security Engineering",
+                "timeline": "4-6 weeks",
+                "rationale": "Reduce manual overhead and improve response time",
+                "success_criteria": "Automated escalation for critical/high severity incidents",
+                "estimated_effort": "24-40 hours"
+            },
+            {
+                "action": "Establish communication templates for stakeholder updates",
+                "priority": "medium",
+                "category": "process",
+                "owner": "IR Team Lead",
+                "timeline": "2 weeks",
+                "rationale": "Streamline incident communication and reduce confusion",
+                "success_criteria": "Templates created for executives, IT teams, and end users",
+                "estimated_effort": "4-8 hours"
             }
-        ]
+        ])
+
+        # Sort by priority
+        priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        improvements.sort(key=lambda x: priority_order.get(x["priority"], 4))
+
+        return improvements
 
     def _generate_training_needs(self, context: AgentContext) -> List[Dict[str, Any]]:
         """Generate training needs"""

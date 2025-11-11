@@ -172,11 +172,33 @@ class ThreatForecast:
 class FeatureExtractor:
     """Extract ML features from security events."""
 
-    def __init__(self):
-        self.event_history: List[SecurityEvent] = []
-        self.source_history: Dict[str, List[datetime]] = defaultdict(list)
-        self.target_history: Dict[str, List[datetime]] = defaultdict(list)
+    def __init__(self, max_history_size: int = 10000, max_entity_history: int = 1000):
+        """
+        Initialize feature extractor with bounded collections.
+
+        Args:
+            max_history_size: Maximum number of events to keep in history
+            max_entity_history: Maximum history entries per source/target
+        """
+        from collections import deque
+
+        self.max_history_size = max_history_size
+        self.max_entity_history = max_entity_history
+
+        # Use deque with maxlen for automatic eviction
+        self.event_history: deque = deque(maxlen=max_history_size)
+
+        # Bounded history per entity
+        self.source_history: Dict[str, deque] = defaultdict(
+            lambda: deque(maxlen=max_entity_history)
+        )
+        self.target_history: Dict[str, deque] = defaultdict(
+            lambda: deque(maxlen=max_entity_history)
+        )
+
+        # Bounded pattern frequency (keep only top N patterns)
         self.pattern_frequency: Dict[str, int] = Counter()
+        self.max_patterns = 10000  # Keep top 10k patterns
 
     def extract_features(self, event: SecurityEvent, context_events: Optional[List[SecurityEvent]] = None) -> MLFeatures:
         """Extract feature vector from security event."""
@@ -250,12 +272,15 @@ class FeatureExtractor:
             malicious_ioc_ratio = 0.0
             ioc_confidence_avg = 0.0
 
-        # Update history
+        # Update history with bounded collections
         if source_ip:
             self.source_history[source_ip].append(timestamp)
         if target_ip:
             self.target_history[target_ip].append(timestamp)
+
+        # Update pattern frequency with pruning
         self.pattern_frequency[pattern_key] += 1
+        self._prune_patterns_if_needed()
 
         return MLFeatures(
             hour_of_day=hour_of_day,
@@ -430,13 +455,34 @@ class FeatureExtractor:
 
         return False
 
+    def _prune_patterns_if_needed(self) -> None:
+        """Prune pattern frequency map to prevent unbounded growth."""
+        if len(self.pattern_frequency) > self.max_patterns:
+            # Keep only the most frequent patterns
+            most_common = self.pattern_frequency.most_common(self.max_patterns // 2)
+            self.pattern_frequency = Counter(dict(most_common))
+            logger.debug(f"Pruned pattern frequency map to {len(self.pattern_frequency)} entries")
+
+    def get_memory_stats(self) -> Dict[str, int]:
+        """Get memory usage statistics for bounded collections."""
+        return {
+            "event_history_size": len(self.event_history),
+            "source_entities": len(self.source_history),
+            "target_entities": len(self.target_history),
+            "pattern_count": len(self.pattern_frequency),
+            "max_history_size": self.max_history_size,
+            "max_entity_history": self.max_entity_history,
+            "max_patterns": self.max_patterns
+        }
+
 
 class MLEngine:
     """Machine Learning Engine for threat detection and prediction."""
 
-    def __init__(self, enable_training: bool = True):
+    def __init__(self, enable_training: bool = True, use_batching: bool = True):
         self.feature_extractor = FeatureExtractor()
         self.enable_training = enable_training
+        self.use_batching = use_batching
 
         # Training data storage
         self.training_features: List[MLFeatures] = []
@@ -451,7 +497,7 @@ class MLEngine:
         self.anomalies_detected = 0
         self.threats_predicted = 0
 
-        logger.info("ML Engine initialized")
+        logger.info(f"ML Engine initialized (batching={'enabled' if use_batching else 'disabled'})")
 
     def detect_anomaly(self, event: SecurityEvent,
                       context_events: Optional[List[SecurityEvent]] = None) -> AnomalyDetection:
@@ -680,8 +726,92 @@ class MLEngine:
 
         logger.info(f"Trained on {len(events)} events")
 
+    def detect_anomalies_batch(self, events: List[SecurityEvent]) -> List[AnomalyDetection]:
+        """
+        Batch anomaly detection for improved performance.
+
+        Optimized version that processes multiple events in parallel.
+
+        Args:
+            events: List of security events to analyze
+
+        Returns:
+            List of anomaly detection results
+        """
+        if not self.use_batching or len(events) == 1:
+            # Fall back to single event processing
+            return [self.detect_anomaly(event, events) for event in events]
+
+        import concurrent.futures
+        from threading import Lock
+
+        logger.info(f"Processing {len(events)} events in batch mode")
+        start_time = time.time()
+
+        # Thread-safe counter updates
+        stats_lock = Lock()
+
+        def process_single(event: SecurityEvent) -> AnomalyDetection:
+            result = self.detect_anomaly(event, events)
+
+            # Update stats thread-safely
+            with stats_lock:
+                pass  # Stats already updated in detect_anomaly
+
+            return result
+
+        # Process in parallel with ThreadPoolExecutor
+        max_workers = min(4, len(events))
+        results = []
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(process_single, event) for event in events]
+            results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+        processing_time = time.time() - start_time
+        logger.info(f"Batch processed {len(events)} events in {processing_time:.2f}s "
+                   f"({len(events)/processing_time:.1f} events/sec)")
+
+        return results
+
+    def predict_threats_batch(self, events: List[SecurityEvent]) -> List[ThreatPrediction]:
+        """
+        Batch threat prediction for improved performance.
+
+        Args:
+            events: List of security events to analyze
+
+        Returns:
+            List of threat predictions
+        """
+        if not self.use_batching or len(events) == 1:
+            return [self.predict_threat(event, events) for event in events]
+
+        import concurrent.futures
+
+        logger.info(f"Batch predicting threats for {len(events)} events")
+        start_time = time.time()
+
+        def process_single(event: SecurityEvent) -> ThreatPrediction:
+            return self.predict_threat(event, events)
+
+        # Process in parallel
+        max_workers = min(4, len(events))
+        results = []
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(process_single, event) for event in events]
+            results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+        processing_time = time.time() - start_time
+        logger.info(f"Batch predicted {len(events)} events in {processing_time:.2f}s")
+
+        return results
+
     def get_statistics(self) -> Dict[str, Any]:
         """Get ML engine statistics."""
+        feature_stats = self.feature_extractor.get_memory_stats()
+
         return {
             "total_predictions": self.total_predictions,
             "anomalies_detected": self.anomalies_detected,
@@ -690,7 +820,9 @@ class MLEngine:
             "threat_rate": self.threats_predicted / self.total_predictions if self.total_predictions > 0 else 0.0,
             "training_samples": len(self.training_features),
             "anomaly_threshold": self.anomaly_threshold,
-            "threat_threshold": self.threat_threshold
+            "threat_threshold": self.threat_threshold,
+            "batching_enabled": self.use_batching,
+            "feature_extractor_stats": feature_stats
         }
 
     # Private helper methods

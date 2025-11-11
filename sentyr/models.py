@@ -56,6 +56,7 @@ class MitreAttack(BaseModel):
     technique_name: str
     tactic: str
     confidence: float = Field(ge=0.0, le=1.0)
+    evidence: str = Field(default="", description="Evidence supporting this technique mapping")
 
 
 class SecurityEvent(BaseModel):

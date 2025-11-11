@@ -788,26 +788,52 @@ CRITICAL: Start with 5W1H Quick Summary for rapid incident understanding.
 
 OUTPUT FORMAT (JSON):
 {
+  "reasoning_chain": "Step-by-step analysis showing your thought process, evidence evaluation, and confidence assessment for each conclusion",
   "five_w1h": {
-    "who": "Detailed actor information",
-    "what": "Specific attack description",
-    "when": "Timeline with timestamps",
-    "where": "Systems and locations",
-    "why": "Motivation assessment",
-    "how": "Technical execution methods"
+    "who": "Detailed actor information with confidence level and supporting evidence",
+    "what": "Specific attack description with technical details",
+    "when": "Timeline with timestamps and sequence of events",
+    "where": "Systems, locations, and attack surface details",
+    "why": "Motivation assessment based on TTPs and targeting",
+    "how": "Technical execution methods with MITRE mapping"
   },
-  "executive_summary": "Business-focused summary for leadership",
+  "executive_summary": "3-5 sentence business-impact summary for executives (avoid technical jargon)",
   "risk_score": 7.5,
   "confidence": 0.85,
-  "attack_chain": ["Step 1: Initial Access via...", "Step 2: Persistence through...", "Step 3: ..."],
-  "mitre_techniques": [
-    {"technique_id": "T1078", "technique_name": "Valid Accounts", "tactic": "Initial Access", "confidence": 0.8}
+  "confidence_reasoning": "Explanation of why you assigned this confidence score",
+  "attack_chain": [
+    "Step 1: Initial Access via phishing (Evidence: attachment.exe, T1566.001)",
+    "Step 2: Persistence via Registry Run key (Evidence: HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run, T1547.001)",
+    "Step 3: Discovery via network scanning (Evidence: nmap.exe execution, T1046)"
   ],
-  "immediate_actions": ["Action 1 with specific steps", "Action 2 with timeline"],
-  "short_term_recommendations": ["Rec 1 with priority", "Rec 2 with owner"],
-  "long_term_recommendations": ["Rec 1 with timeline", "Rec 2 with resources"],
-  "investigation_queries": ["SIEM query 1", "Log search 2"],
-  "detailed_analysis": "Full technical analysis with evidence citations and reasoning"
+  "mitre_techniques": [
+    {
+      "technique_id": "T1078.004",
+      "technique_name": "Valid Accounts: Cloud Accounts",
+      "tactic": "Initial Access",
+      "confidence": 0.9,
+      "evidence": "Multiple failed login attempts followed by successful authentication from anomalous location"
+    }
+  ],
+  "false_positives": ["List any indicators that might be false positives with reasoning"],
+  "immediate_actions": [
+    "CRITICAL (0-1h): Isolate compromised host 10.1.2.3 from network to prevent lateral movement",
+    "HIGH (1-4h): Reset credentials for user account john.doe@company.com and force re-authentication",
+    "HIGH (1-4h): Block malicious IP 198.51.100.42 at perimeter firewall"
+  ],
+  "short_term_recommendations": [
+    "PRIORITY 1 (1-3 days): Deploy EDR agent to unmonitored endpoints (Owner: IT Security)",
+    "PRIORITY 2 (3-7 days): Enable MFA for all privileged accounts (Owner: IAM Team)"
+  ],
+  "long_term_recommendations": [
+    "30 days: Implement network segmentation for critical assets",
+    "60 days: Develop phishing-resistant authentication strategy"
+  ],
+  "investigation_queries": [
+    "Splunk: index=windows EventCode=4624 user=john.doe | stats count by src_ip",
+    "EDR: process_name=powershell.exe AND command_line=*-encodedcommand*"
+  ],
+  "detailed_analysis": "Comprehensive technical analysis with evidence citations, alternative hypothesis consideration, and detailed reasoning for all conclusions"
 }
 
 Provide your analysis in valid JSON format. Be extremely specific, cite all evidence, explain your reasoning with confidence levels, and provide actionable recommendations."""
@@ -830,7 +856,24 @@ Provide your analysis in valid JSON format. Be extremely specific, cite all evid
         events_json = json.dumps([e.model_dump(mode='json') for e in events], indent=2, default=str)
         prompt = """You are an elite security analyst with 20+ years of experience in advanced threat hunting, incident response, malware analysis, and threat intelligence. You have deep expertise in APT operations, MITRE ATT&CK framework, and cyber threat attribution.
 
-Analyze the following security event(s) with systematic, expert-level reasoning, incorporating all available threat intelligence and behavioral analysis.
+CRITICAL ANALYSIS INSTRUCTIONS:
+1. Use chain-of-thought reasoning - explain each step of your analysis
+2. Assess evidence quality and confidence for every claim
+3. Consider alternative hypotheses and rule them out explicitly
+4. Cite specific indicators and data points from the enrichment
+5. Map to MITRE ATT&CK with specific sub-techniques when applicable
+6. Prioritize actionable, practical recommendations
+7. Identify false positive indicators and explain why
+8. Consider business impact and urgency in recommendations
+
+COGNITIVE FRAMEWORK:
+- Initial Assessment: What immediately stands out as suspicious?
+- Evidence Gathering: What data supports the initial assessment?
+- Alternative Theories: What else could explain this activity?
+- Correlation: How do different data points connect?
+- Attribution: What evidence points to specific actors or methods?
+- Impact Analysis: What systems/data are at risk?
+- Response Planning: What should be done first, and why?
 
 SECURITY EVENT DATA:
 {events_json}
@@ -894,7 +937,8 @@ SECURITY EVENT DATA:
                 technique_id=mt["technique_id"],
                 technique_name=mt["technique_name"],
                 tactic=mt["tactic"],
-                confidence=mt.get("confidence", 0.7)
+                confidence=mt.get("confidence", 0.7),
+                evidence=mt.get("evidence", "")  # Capture evidence from enhanced prompt
             ))
 
         five_w1h_data = response_json.get("five_w1h", {})
