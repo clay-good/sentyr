@@ -43,7 +43,7 @@ class SentyrConfig(BaseSettings):
     )
 
     model_name: str = Field(
-        default="claude-3-haiku-20240307",
+        default="claude-3-5-sonnet-20241022",
         description="Claude model to use for analysis"
     )
 
@@ -100,6 +100,43 @@ class SentyrConfig(BaseSettings):
     webhook_secret: Optional[str] = Field(
         default=None,
         description="Secret key for webhook signature verification"
+    )
+
+    # API Security settings
+    allowed_origins: str = Field(
+        default="http://localhost:3000,http://localhost:8000",
+        description="Comma-separated list of allowed CORS origins"
+    )
+
+    max_request_size_mb: int = Field(
+        default=10,
+        description="Maximum request body size in megabytes"
+    )
+
+    # Redis Cache Configuration
+    redis_host: str = Field(
+        default="localhost",
+        description="Redis server host"
+    )
+
+    redis_port: int = Field(
+        default=6379,
+        description="Redis server port"
+    )
+
+    redis_db: int = Field(
+        default=0,
+        description="Redis database number"
+    )
+
+    redis_password: Optional[str] = Field(
+        default=None,
+        description="Redis password (if authentication is enabled)"
+    )
+
+    use_redis_cache: bool = Field(
+        default=False,
+        description="Use Redis for caching instead of file-based cache"
     )
 
     # Notification settings

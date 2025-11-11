@@ -179,30 +179,52 @@ class SecurityAnalystAgent(BaseAgent):
         start_time = time.time()
         logger.info(f"Starting enhanced analysis for {len(events)} event(s)")
 
-        # Phase 1: IOC Enrichment
+        # Phase 1: IOC Enrichment (synchronous - needed for later phases)
         logger.debug("Phase 1: IOC Enrichment")
         ioc_enrichments = self._enrich_iocs(events)
 
-        # Phase 2: URLScan.io Enrichment (NEW - v1.0.0)
-        logger.debug("Phase 2: URLScan.io Enrichment")
-        urlscan_results = await self._enrich_with_urlscan(events, ioc_enrichments)
+        # Phase 2-6: Parallel Enrichment (OPTIMIZED)
+        # Run all enrichment phases in parallel to minimize latency
+        logger.debug("Phases 2-6: Running parallel enrichment")
 
-        # Phase 3: WHOIS Enrichment (NEW - v1.0.0)
-        logger.debug("Phase 3: WHOIS Enrichment")
-        whois_results = await self._enrich_with_whois(events, ioc_enrichments)
+        enrichment_tasks = [
+            self._enrich_with_urlscan(events, ioc_enrichments),
+            self._enrich_with_whois(events, ioc_enrichments),
+            self._perform_behavioral_analysis_async(events),
+            self._perform_ml_analysis_async(events),
+            self._enrich_with_threat_intel_async(events)
+        ]
 
-        # Phase 4: Behavioral Analysis
-        logger.debug("Phase 4: Behavioral Analysis")
-        behavioral_results = self._perform_behavioral_analysis(events)
-        anomalies, attack_patterns = behavioral_results
+        # Run all tasks concurrently with timeout
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*enrichment_tasks, return_exceptions=True),
+                timeout=30.0  # 30 second timeout for all enrichment
+            )
 
-        # Phase 5: ML-Powered Analysis (v0.10.0)
-        logger.debug("Phase 5: ML-Powered Analysis")
-        ml_anomalies, ml_predictions = self._perform_ml_analysis(events)
+            # Unpack results (handle exceptions gracefully)
+            urlscan_results = results[0] if not isinstance(results[0], Exception) else []
+            whois_results = results[1] if not isinstance(results[1], Exception) else []
+            behavioral_results = results[2] if not isinstance(results[2], Exception) else ([], [])
+            ml_results = results[3] if not isinstance(results[3], Exception) else ([], [])
+            enriched_events = results[4] if not isinstance(results[4], Exception) else events
 
-        # Phase 6: Threat Intelligence Enrichment
-        logger.debug("Phase 6: Threat Intelligence Enrichment")
-        enriched_events = self._enrich_with_threat_intel(events)
+            # Unpack behavioral and ML results
+            anomalies, attack_patterns = behavioral_results
+            ml_anomalies, ml_predictions = ml_results
+
+            # Log any errors
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    logger.warning(f"Enrichment task {i} failed: {result}")
+
+        except asyncio.TimeoutError:
+            logger.error("Enrichment timeout - continuing with partial results")
+            urlscan_results = []
+            whois_results = []
+            anomalies, attack_patterns = [], []
+            ml_anomalies, ml_predictions = [], []
+            enriched_events = events
 
         # Phase 7: Build Enhanced Prompt with all context
         logger.debug("Phase 7: Building enhanced analysis prompt")
@@ -1162,3 +1184,25 @@ SECURITY EVENT DATA:
             ml_predictions.append(prediction_result)
 
         return ml_anomalies, ml_predictions
+
+    # Async wrapper methods for parallel enrichment
+    async def _perform_behavioral_analysis_async(
+        self,
+        events: List[SecurityEvent]
+    ) -> Tuple[List[BehavioralAnomaly], List[AttackPattern]]:
+        """Async wrapper for behavioral analysis."""
+        return await asyncio.to_thread(self._perform_behavioral_analysis, events)
+
+    async def _perform_ml_analysis_async(
+        self,
+        events: List[SecurityEvent]
+    ) -> Tuple[List[AnomalyDetection], List[ThreatPrediction]]:
+        """Async wrapper for ML analysis."""
+        return await asyncio.to_thread(self._perform_ml_analysis, events)
+
+    async def _enrich_with_threat_intel_async(
+        self,
+        events: List[SecurityEvent]
+    ) -> List[SecurityEvent]:
+        """Async wrapper for threat intel enrichment."""
+        return await asyncio.to_thread(self._enrich_with_threat_intel, events)

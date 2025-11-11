@@ -27,6 +27,8 @@ from sentyr.parsers import (
 from sentyr.agents import SecurityAnalystAgent
 from sentyr.rag import IncidentRAG
 from sentyr.cache import AnalysisCache
+from sentyr.cache_redis import RedisAnalysisCache
+from sentyr.rate_limiter import RedisRateLimiter
 from sentyr.models import SecurityEvent, AnalysisResult, Severity, EventCategory
 from sentyr.logger import setup_logger, get_logger
 from sentyr.webhooks import webhook_router, WebhookProcessor, set_webhook_processor
@@ -75,14 +77,8 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS middleware will be configured dynamically in startup_event()
+# based on environment configuration
 
 # Add GZip compression
 app.add_middleware(GZipMiddleware, minimum_size=1000)
@@ -96,11 +92,6 @@ app.mount("/static", app_static, name="static")
 # Include webhook router
 app.include_router(webhook_router)
 
-# Rate limiting state
-rate_limit_store = defaultdict(list)
-RATE_LIMIT_REQUESTS = 100  # requests per window
-RATE_LIMIT_WINDOW = 60  # seconds
-
 # Application state
 app_state = {
     "is_ready": False,
@@ -109,35 +100,42 @@ app_state = {
     "shutdown_requested": False
 }
 
+# Global rate limiter (will be initialized in startup)
+rate_limiter = None
+
 
 # Rate limiting middleware
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    """Simple rate limiting middleware."""
+    """Distributed rate limiting middleware using Redis."""
     # Skip rate limiting for health checks
     if request.url.path in ["/health", "/ready", "/metrics"]:
         return await call_next(request)
 
-    client_ip = request.client.host
-    current_time = time.time()
+    # If rate limiter is not initialized, allow request
+    if rate_limiter is None:
+        return await call_next(request)
 
-    # Clean old requests
-    rate_limit_store[client_ip] = [
-        req_time for req_time in rate_limit_store[client_ip]
-        if current_time - req_time < RATE_LIMIT_WINDOW
-    ]
+    client_ip = request.client.host
 
     # Check rate limit
-    if len(rate_limit_store[client_ip]) >= RATE_LIMIT_REQUESTS:
+    allowed = await rate_limiter.is_allowed(client_ip)
+
+    if not allowed:
+        remaining = await rate_limiter.get_remaining(client_ip)
         return JSONResponse(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             content={
-                "detail": f"Rate limit exceeded. Max {RATE_LIMIT_REQUESTS} requests per {RATE_LIMIT_WINDOW} seconds."
+                "detail": f"Rate limit exceeded. Max {rate_limiter.max_requests} requests per {rate_limiter.window_seconds} seconds.",
+                "remaining": remaining,
+                "reset_in_seconds": rate_limiter.window_seconds
+            },
+            headers={
+                "X-RateLimit-Limit": str(rate_limiter.max_requests),
+                "X-RateLimit-Remaining": str(remaining),
+                "X-RateLimit-Reset": str(rate_limiter.window_seconds)
             }
         )
-
-    # Record request
-    rate_limit_store[client_ip].append(current_time)
 
     return await call_next(request)
 
@@ -161,12 +159,39 @@ async def metrics_middleware(request: Request, call_next):
     return response
 
 
+# Request size limit middleware
+@app.middleware("http")
+async def request_size_limit_middleware(request: Request, call_next):
+    """Limit request body size to prevent DoS attacks."""
+    if request.method in ["POST", "PUT", "PATCH"]:
+        # Get content length from headers
+        content_length = request.headers.get("content-length")
+        if content_length:
+            content_length = int(content_length)
+            # Use config max_request_size_mb if available, otherwise default to 10MB
+            max_size = 10 * 1024 * 1024  # 10MB default
+
+            # Try to get from config if it's loaded
+            if config and hasattr(config, 'max_request_size_mb'):
+                max_size = config.max_request_size_mb * 1024 * 1024
+
+            if content_length > max_size:
+                return JSONResponse(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    content={
+                        "detail": f"Request body too large. Maximum size: {max_size // (1024*1024)}MB"
+                    }
+                )
+
+    return await call_next(request)
+
+
 # Security headers middleware
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
     """Add security headers to all responses."""
     response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosnif"
+    response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
@@ -259,7 +284,7 @@ class StatsResponse(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     """Initialize components on startup."""
-    global config, agent, rag, cache, parsers, notification_manager, correlation_engine, visualization_engine, incident_manager, ticketing_manager, ai_soc_analytics, streaming_analytics, forensics_engine
+    global config, agent, rag, cache, parsers, notification_manager, correlation_engine, visualization_engine, incident_manager, ticketing_manager, ai_soc_analytics, streaming_analytics, forensics_engine, rate_limiter
 
     try:
         logger.info("Starting Sentyr API server...")
@@ -268,10 +293,54 @@ async def startup_event():
         config = load_config()
         logger.info("Configuration loaded")
 
+        # Configure CORS middleware dynamically based on environment
+        allowed_origins = config.allowed_origins.split(",")
+
+        # In production, use strict CORS; in development, allow localhost
+        if config.is_production():
+            cors_origins = allowed_origins
+            logger.info(f"Production mode: CORS enabled for {len(cors_origins)} origins")
+        else:
+            # Development mode - be more permissive but still explicit
+            cors_origins = allowed_origins
+            logger.info(f"Development mode: CORS enabled for {cors_origins}")
+
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+            allow_headers=["*"],
+            max_age=3600
+        )
+        logger.info("CORS middleware configured")
+
         # Initialize components
         agent = SecurityAnalystAgent(config)
         rag = IncidentRAG(config) if config.enable_rag else None
-        cache = AnalysisCache(config) if config.enable_cache else None
+
+        # Initialize cache (Redis if enabled, otherwise file-based)
+        if config.enable_cache:
+            if config.use_redis_cache:
+                cache = RedisAnalysisCache(config)
+                logger.info("Using Redis-based caching system")
+            else:
+                cache = AnalysisCache(config)
+                logger.info("Using file-based caching system")
+        else:
+            cache = None
+            logger.info("Caching disabled")
+
+        # Initialize distributed rate limiter
+        rate_limiter = RedisRateLimiter(
+            redis_host=config.redis_host,
+            redis_port=config.redis_port,
+            redis_db=getattr(config, 'redis_rate_limit_db', 1),  # Use separate DB for rate limiting
+            redis_password=config.redis_password,
+            max_requests=100,
+            window_seconds=60
+        )
+        logger.info("Rate limiter initialized")
 
         # Initialize correlation engine
         correlation_engine = CorrelationEngine(
